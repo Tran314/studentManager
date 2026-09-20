@@ -25,7 +25,7 @@ jobs:
           restore-keys: nvd-${{ runner.os }}-
       - name: Scan runtime dependencies (CVSS 7 gate)
         run: mvn -B -ntp -Psecurity verify -DskipITs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: dependency-security-report
