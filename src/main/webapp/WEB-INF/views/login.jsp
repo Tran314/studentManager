@@ -7,6 +7,6 @@
 <label for="username">登录名 / 学号</label><input id="username" name="username" maxlength="64" autocomplete="username" required value="<c:out value='${param.username}'/>" placeholder="学生请输入学号">
 <label for="password">密码</label><input id="password" name="password" type="password" maxlength="128" autocomplete="current-password" required placeholder="请输入密码">
 <button class="primary wide" type="submit">登录工作台 <span>→</span></button></form>
-<p class="auth-switch">还没有学生账号？ <a href="${pageContext.request.contextPath}/register">立即注册</a></p></div></section>
+<p class="auth-switch">还没有学生账号？请联系管理员创建。</p></div></section>
 <%@ include file="footer.jspf" %>
 

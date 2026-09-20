@@ -126,14 +126,15 @@ def main():
     created = []
     try:
         data = {"sno": str(sno), "sname": name, "age": "21", "address": '香港😀<b>"&', "password": password, "role": "ADMIN"}
-        status, _, body = public.submit("/register", data)
-        require(status == 302, "Student registration succeeds")
+        # Public registration is closed (P0-1). Admin /students/create covers the same paths.
+        status, _, body = admin.submit("/students/create", data)
+        require(status == 302, "Admin creates a student")
         created.append(sno)
-        require(public.submit("/register", data)[0] == 409, "Duplicate student rejected")
+        require(admin.submit("/students/create", data)[0] == 409, "Duplicate student rejected")
         invalid = {**data, "sno": str(other_sno), "age": "151"}
-        require(public.submit("/register", invalid)[0] == 400, "Invalid age rejected")
+        require(admin.submit("/students/create", invalid)[0] == 400, "Invalid age rejected")
         require(admin.request("/students/detail?sno=" + str(other_sno))[0] == 404, "Invalid form did not create a row")
-        require(admin.submit("/students/create", {**data, "sno": str(other_sno), "sname": "其他学生"})[0] == 302, "Admin creates a student")
+        require(admin.submit("/students/create", {**data, "sno": str(other_sno), "sname": "其他学生"})[0] == 302, "Admin creates a second student")
         created.append(other_sno)
 
         status, _, body = admin.request("/students?name=" + urlencode({"x": "_"}).split("=", 1)[1])
