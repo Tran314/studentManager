@@ -19,10 +19,8 @@
                compressionMinSize="1024"
                compressibleMimeType="text/html,text/css,application/javascript,application/json,text/plain,text/xml" />
     <Engine name="Catalina" defaultHost="localhost">
-      <Realm className="org.apache.catalina.realm.LockOutRealm">
-        <Realm className="org.apache.catalina.realm.UserDatabaseRealm"
-               resourceName="UserDatabase" />
-      </Realm>
+      <!-- Authentication is handled by WebSecurityFilter; no unconfigured
+           UserDatabase JNDI realm is needed by this application. -->
       <Host name="localhost" appBase="webapps"
             unpackWARs="true" autoDeploy="false">
         <Valve className="org.apache.catalina.valves.AccessLogValve" directory="logs"

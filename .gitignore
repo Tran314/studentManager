@@ -5,3 +5,5 @@ target/
 legacy/
 work/
 __pycache__/
+certs/
+logs/

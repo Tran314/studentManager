@@ -18,7 +18,7 @@
         <spotbugs.version>4.9.6.0</spotbugs.version>
         <findsecbugs.version>1.13.0</findsecbugs.version>
         <dependency-check.version>12.1.1</dependency-check.version>
-        <jacoco.version>0.8.13</jacoco.version>
+        <jacoco.version>0.8.15</jacoco.version>
         <enforcer.version>3.6.1</enforcer.version>
         <mockito.version>5.18.0</mockito.version>
         <testcontainers.version>1.21.4</testcontainers.version>
@@ -51,6 +51,16 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.jboss.logging</groupId>
+                <artifactId>jboss-logging</artifactId>
+                <version>3.6.3.Final</version>
+            </dependency>
+            <dependency>
+                <groupId>jakarta.xml.bind</groupId>
+                <artifactId>jakarta.xml.bind-api</artifactId>
+                <version>4.0.5</version>
+            </dependency>
             <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
@@ -188,7 +198,9 @@
                 <version>${spotless.version}</version>
                 <configuration>
                     <java>
-                        <palantirJavaFormat/>
+                        <palantirJavaFormat>
+                            <version>2.71.0</version>
+                        </palantirJavaFormat>
                     </java>
                 </configuration>
                 <executions>
@@ -220,7 +232,8 @@
                                     <version>[25,)</version>
                                 </requireJavaVersion>
                                 <banDuplicatePomDependencyVersions/>
-                                <banSnapshots/>
+                                <requireReleaseDeps/>
+                                <dependencyConvergence/>
                             </rules>
                         </configuration>
                     </execution>
@@ -314,6 +327,7 @@
                 <version>${dependency-check.version}</version>
                 <configuration>
                     <failBuildOnCVSS>7</failBuildOnCVSS>
+                    <nvdApiKeyEnvironmentVariable>NVD_API_KEY</nvdApiKeyEnvironmentVariable>
                     <skipProvidedScope>true</skipProvidedScope>
                     <skipTestScope>true</skipTestScope>
                 </configuration>

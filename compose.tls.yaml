@@ -12,7 +12,7 @@
 # COOKIE_SECURE flag so the session cookie is HTTPS-only, and lets
 # WebSecurityFilter emit Strict-Transport-Security. Everything else
 # inherits from compose.yaml.
-name: studentmanagersix-tls
+name: studentmanagersix
 services:
   caddy:
     image: caddy:2

@@ -17,7 +17,7 @@ services:
       interval: 3s
       timeout: 5s
       retries: 40
-    restart: unless-stopped
+    restart: "no"
     security_opt:
       - "no-new-privileges:true"
   tests:
@@ -34,7 +34,7 @@ services:
     depends_on:
       test-db:
         condition: service_healthy
-    restart: unless-stopped
+    restart: "no"
     security_opt:
       - "no-new-privileges:true"
 volumes:

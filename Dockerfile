@@ -3,7 +3,9 @@ WORKDIR /build
 
 # Cache dependencies separately so source changes don't bust the Maven layer.
 COPY pom.xml .mvn/ ./
-RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp dependency:go-offline
+# Resolve application/test libraries here; go-offline also downloads every
+# report/security plugin and makes a runtime image depend on their repositories.
+RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp dependency:resolve
 
 COPY src ./src
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp package

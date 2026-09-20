@@ -30,7 +30,7 @@ jobs:
           cache: maven
 
       - name: mvn verify (skip ITs)
-        # Spotless + SpotBugs + dependency-check + JaCoCo + Surefire all run here.
+        # Spotless + SpotBugs + JaCoCo + Surefire all run here.
         # Failsafe is skipped; integration tests live in their own job against a real MySQL.
         run: mvn -B verify -DskipITs
 
@@ -55,17 +55,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: spotbugs-report
-          path: target/spotbugs.html
-          retention-days: 14
-
-      - name: Upload dependency-check report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-report
-          path: |
-            target/dependency-check-report.html
-            target/dependency-check-report.json
+          path: target/spotbugsXml.xml
           retention-days: 14
 
   integration:
@@ -96,6 +86,10 @@ jobs:
           name: failsafe-reports
           path: target/failsafe-reports
           retention-days: 14
+
+      - name: Tear down integration containers
+        if: always()
+        run: docker compose -f compose.test.yaml down
 
   acceptance:
     name: HTTP acceptance (live app)

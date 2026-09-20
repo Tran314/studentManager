@@ -5,3 +5,6 @@ legacy
 .env
 work
 scripts/__pycache__
+certs
+logs
+docs
