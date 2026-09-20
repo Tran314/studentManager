@@ -9,21 +9,22 @@
 
 ~~~powershell
 Copy-Item .env.example .env
-# 可编辑 .env，修改演示密码或 APP_PORT。
+# 编辑 .env，把每一行 <set-...> 占位符替换为 24 位随机密码：
+#   -join ((33..126) | Get-Random -Count 24 | ForEach-Object {[char]$_})
 docker compose up --build -d
 docker compose ps
 ~~~
 
 3. 等待 db 和 app 显示 healthy，然后打开 <http://localhost:8080/studentManagerSix/>。
 
-本次改造已经创建了本机 .env。源码包只提供 .env.example，解压后按上面的步骤复制即可。首次运行需要联网下载镜像和 Maven 依赖，之后构建会复用缓存。
+源码包只提供 `.env.example`，**不包含任何可用默认密码**。`.env.example` 中的占位符是非空字符串，docker compose 会原样使用——必须在第一次启动前完成替换。
 
-| 账号类型 | 登录名 | 初次默认密码 |
+| 账号类型 | 登录名 | 初始密码 |
 |---|---|---|
-| 管理员 | admin | Admin-Demo-2026 |
-| 示例学生 | 1 至 10 | Student-Demo-2026 |
+| 管理员 | admin | `.env` 中 `DEMO_ADMIN_PASSWORD` 的值 |
+| 示例学生 | 1 至 10 | `.env` 中 `DEMO_STUDENT_PASSWORD` 的值 |
 
-密码以 **.env 中首次初始化的设置**为准，后续编辑 .env 不会重置已有用户密码。以上仅为本机演示默认值。
+首次运行需要联网下载镜像和 Maven 依赖，之后构建会复用缓存。
 
 ~~~powershell
 docker compose logs --tail 80 app    # 应用日志
@@ -34,16 +35,30 @@ docker compose down                 # 移除本项目容器及网络，保留数
 
 项目不对主机暴露数据库端口；网页仅监听本机 127.0.0.1。若修改 APP_PORT，访问相应端口。已有数据保存在 Compose 的 student-data 卷中，不要在保留数据时使用 down -v。
 
+> **已有数据卷升级**：MySQL 的 `/docker-entrypoint-initdb.d` 只在数据卷首次初始化时执行。本项目新增的 `002-index.sql`（学生姓名索引）和 `003-audit.sql`（审计表）不会自动应用到旧数据卷，需要手动跑一次：
+> ```powershell
+> docker compose exec db mysql -ustudent_app -p<your_db_password> student_manager < docker/init/002-index.sql
+> docker compose exec db mysql -ustudent_app -p<your_db_password> student_manager < docker/init/003-audit.sql
+> ```
+> 否则 Hibernate `validate` 会因缺 `audit_log` 表 / `idx_student_sname` 让 app 无法启动。
+
 ## 功能与权限
 
-- 管理员：新增学生（同时创建登录账号）、学生详情、编辑资料、删除学生及其账号、按学号精确搜索、按姓名关键词搜索、每页10条分页。
-- 学生：学号登录、查看与编辑本人姓名/年龄/地址、修改密码。
+- 管理员：新增学生（同时创建登录账号）、学生详情、编辑资料、删除学生及其账号、按学号精确搜索、按姓名 / 学号 / 年龄关键词搜索、页大小 10/20/50、升 / 降序、CSV 导出、**重置学生密码**（强制踢出旧会话）、审计日志落库。
+- 学生：学号登录、查看与编辑本人姓名 / 年龄 / 地址、修改密码。
 - 双方：修改密码、退出登录。管理员账号不属于学生档案，不能从学生删除入口删除。
-- 学号为1–2147483647的整数，创建后不可修改；姓名1–20字、年龄1–150、地址不超过50字，密码8–128个字符。
-- 无匹配数据时展示空状态；负页码调整为1，超过末页时回到末页，非整数页码返回400。
-- 注册不接受角色选择；学生无法通过修改请求参数获取他人资料。
-- 密码变更通过账户 auth_version 使所有旧会话失效；删除账户后旧会话也立即失效。
-- 登录成功变更 Session ID，30分钟无访问后过期；修改操作仅接受带 CSRF 令牌的 POST。
+- 学号为 1–2147483647 的整数，创建后不可修改；姓名 1–20 字、年龄 1–150、地址不超过 50 字，密码 8–128 个字符；密码不得等于登录名、不得是常见弱口令。
+- 无匹配数据时展示空状态；负页码调整为 1，超过末页时回到末页，非整数页码返回 400。
+- **公开注册已关闭**（`/register` 永久 410）。学生账号由管理员在 `/students/create` 创建。
+- 密码变更通过账户 `auth_version` 使所有旧会话失效；删除账户后旧会话也立即失效；`Account.upgradeHash()` 透明升级老哈希迭代数（不踢会话）。
+- 登录成功变更 Session ID，30 分钟无访问后过期；修改操作仅接受带 CSRF 令牌的 POST；登录 / 改密受 RateLimiter 节流（5 次 / 分钟，连续 10 次失败锁 15 分钟）。
+
+### 验收
+
+- `python scripts/smoke_test.py --restart`：85 项 HTTP 断言，覆盖登录、CSRF、越权、HTML 转义、Cookie、登录退出、改密、限流、CSV 导出、管理员重置密码。
+- `mvn -B verify`：单元测试 + Spotless 格式检查 + SpotBugs（High 级别零容忍）+ JaCoCo 覆盖门禁（项目 ≥70%；Passwords / Validation / StudentServiceImpl ≥85%）。
+- `mvn -Psecurity verify`：额外跑 OWASP dependency-check，CVSS ≥7 阻断。
+- `docker compose -f compose.test.yaml up --abort-on-container-exit --exit-code-from tests`：真实 MySQL 集成测试（`*IT.java`）。
 
 ## 技术栈与工程结构
 
