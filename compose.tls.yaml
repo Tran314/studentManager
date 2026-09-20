@@ -1,0 +1,47 @@
+# compose.tls.yaml - HTTPS overlay for compose.yaml.
+#
+# Usage:
+#   1. Provide certificates at ./certs/fullchain.pem and
+#      ./certs/privkey.pem. For local dev, run `mkcert -cert-file
+#      ./certs/fullchain.pem -key-file ./certs/privkey.pem localhost
+#      127.0.0.1`. For production, drop in your CA-issued files.
+#   2. docker compose -f compose.yaml -f compose.tls.yaml up -d --build
+#   3. Browse https://localhost/ instead of http://localhost:8080/.
+#
+# This overlay adds the Caddy reverse proxy on 443, sets the app's
+# COOKIE_SECURE flag so the session cookie is HTTPS-only, and lets
+# WebSecurityFilter emit Strict-Transport-Security. Everything else
+# inherits from compose.yaml.
+name: studentmanagersix-tls
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:443:443"
+    volumes:
+      - ./certs:/certs:ro
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    security_opt:
+      - "no-new-privileges:true"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256m
+  app:
+    environment:
+      COOKIE_SECURE: "true"
+volumes:
+  caddy_data:
+  caddy_config:

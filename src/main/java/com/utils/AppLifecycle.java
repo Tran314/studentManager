@@ -28,6 +28,10 @@ public class AppLifecycle implements ServletContextListener {
             // P2-4: expose input limits to JSP via applicationScope so server-side
             // validation and HTML5 maxlength share one source of truth.
             context.setAttribute("limits", Limits.get());
+            // S6 (P4-5): when behind the TLS overlay, COOKIE_SECURE=true and the
+            // filter emits a Strict-Transport-Security header.
+            context.setAttribute("cookieSecure",
+                    Boolean.parseBoolean(HibernateSessionFactoryUtil.env("COOKIE_SECURE", "false")));
         } catch (RuntimeException e) {
             if (factory != null) factory.close();
             throw e;

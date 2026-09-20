@@ -229,6 +229,17 @@ public class WebSecurityFilter implements Filter {
         response.setHeader("Content-Security-Policy",
                 "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
                         + "frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+        // P4-5: only emit HSTS when running behind HTTPS. A long-lived HSTS
+        // header on an HTTP-only deployment is a footgun because browsers
+        // remember it and refuse the downgrade.
+        if (cookieSecure()) {
+            response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+        }
+    }
+
+    private boolean cookieSecure() {
+        Object value = incoming.getServletContext().getAttribute("cookieSecure");
+        return value instanceof Boolean && (Boolean) value;
     }
 
     private void renderError(HttpServletRequest req, HttpServletResponse res, int status, String message)
