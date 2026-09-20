@@ -1,0 +1,7 @@
+target/
+.idea/
+*.iml
+.env
+legacy/
+work/
+__pycache__/

@@ -1,0 +1,42 @@
+name: studentmanagersix
+services:
+  db:
+    image: mysql:9.7.1
+    environment:
+      MYSQL_DATABASE: student_manager
+      MYSQL_USER: student_app
+      MYSQL_PASSWORD: ${DB_PASSWORD:?请先复制.env.example为.env并设置密码}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?请设置数据库root密码}
+    volumes:
+      - student-data:/var/lib/mysql
+      - ./docker/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -h 127.0.0.1 -u $$MYSQL_USER -D student_manager -e 'SELECT 1 FROM app_seed LIMIT 1'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+  app:
+    build: .
+    image: studentmanagersix-app:1.0.0
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    environment:
+      DB_URL: jdbc:mysql://db:3306/student_manager?connectionTimeZone=UTC&allowPublicKeyRetrieval=true&sslMode=DISABLED
+      DB_USER: student_app
+      DB_PASSWORD: ${DB_PASSWORD:?请设置数据库密码}
+      SEED_DEMO: "true"
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:?请设置演示管理员密码}
+      DEMO_STUDENT_PASSWORD: ${DEMO_STUDENT_PASSWORD:?请设置演示学生密码}
+      COOKIE_SECURE: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "java", "-cp", "/usr/local/tomcat/webapps/studentManagerSix/WEB-INF/classes", "com.utils.HealthProbe"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+volumes:
+  student-data:

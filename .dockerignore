@@ -1,0 +1,7 @@
+target
+legacy
+.git
+.idea
+.env
+work
+scripts/__pycache__

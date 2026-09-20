@@ -1,0 +1,36 @@
+# Isolated integration database: no ports, no persistent volume, no demo data.
+name: studentmanagersix-tests
+services:
+  test-db:
+    image: mysql:9.7.1
+    environment:
+      MYSQL_DATABASE: student_manager_test
+      MYSQL_USER: student_test
+      MYSQL_PASSWORD: test-only-password
+      MYSQL_ROOT_PASSWORD: test-root-only-password
+    tmpfs:
+      - /var/lib/mysql
+    volumes:
+      - ./docker/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -h 127.0.0.1 -u $$MYSQL_USER -D student_manager_test -e 'SELECT 1 FROM app_seed LIMIT 1'"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+  tests:
+    image: maven:3.9.16-eclipse-temurin-25
+    working_dir: /project
+    volumes:
+      - .:/project
+      - test-maven-cache:/root/.m2
+    environment:
+      TEST_DB_URL: jdbc:mysql://test-db:3306/student_manager_test?allowPublicKeyRetrieval=true&sslMode=DISABLED
+      TEST_DB_USER: student_test
+      TEST_DB_PASSWORD: test-only-password
+    command: ["mvn", "-B", "verify"]
+    depends_on:
+      test-db:
+        condition: service_healthy
+volumes:
+  test-maven-cache:
+
