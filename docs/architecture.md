@@ -14,9 +14,9 @@
 | WEB-INF/lib Hibernate 3与根lib Hibernate 5.4混用 | 单一Hibernate 7.4.7依赖图，旧JAR不进入构建 |
 | HQL裸问号位置参数、旧save/delete API | 类型化HQL、命名参数、persist/remove |
 | DAO自己开启事务；查询不提交，删除嵌套事务 | Service每个操作一个Session/事务，统一提交、回滚、关闭。`tx()` 走读写事务，`txRead()` 走 `setDefaultReadOnly(true)`；Hibernate 配置 `provider_disables_autocommit=true` + Hikari `autoCommit=false` 跳过冗余 setAutoCommit |
-| 异常吞掉、返回null或0导致空指针 | 业务异常携带状态和中文提示；系统错误日志记录类别；约束冲突按约束名分派 409/400 |
-| 登录仅跳转，任何人可进入管理功能 | Session Identity、账户有效性检查及管理员Filter；30s 缓存跳过 DB 校验；RateLimiter 5/min + 10 失败锁 15 min；公开注册关闭（410） |
-| 密码CHAR(3)明文，还展示于列表 | 独立账户表，PBKDF2-SHA256，页面无密码材料；登录时 `needsRehash` 透明升级到当前迭代数；`assertSafe` 拒绝常见弱口令；`assertNotEqualToLogin` 禁止密码=用户名 |
+| 异常吞掉、返回null或0导致空指针 | 业务异常携带状态和中文提示；系统错误日志记录类别；重复键按 MySQL 错误码 1062 映射 409，其余约束映射 400 |
+| 登录仅跳转，任何人可进入管理功能 | Session Identity、账户有效性检查及管理员Filter；每次请求校验 auth_version；独立 IP/账号配额、有限容量与 PBKDF2 并发限制；公开注册关闭（410） |
+| 密码CHAR(3)明文，还展示于列表 | 独立账户表，PBKDF2-SHA256（600000 次），页面无密码材料；登录时 `needsRehash` 透明升级到当前迭代数；`assertSafe` 拒绝常见弱口令；`assertNotEqualToLogin` 禁止密码=用户名 |
 | Student.hbm.xml映射 | Jakarta Persistence 3.2注解映射 |
 | JSP脚本与强制ArrayList转换 | request作用域、EL与转义标签 |
 | 分页输入脆弱，无稳定排序及元数据 | PageResult、学号/姓名/年龄排序、搜索条件保留、完整前后页；可切页大小 10/20/50；CSV 导出（RFC 4180 + UTF-8 BOM + 公式注入防护） |
@@ -28,7 +28,7 @@
 | 无 HTTP 压缩 | Tomcat Connector `compression="on"` + `compressibleMimeType` |
 | 无 HTTPS 档位 | `compose.tls.yaml` Caddy 反代 + 条件性 `Strict-Transport-Security` |
 | 单行压缩代码不可审查 | Spotless + `palantirJavaFormat`；`mvn spotless:check` 在 verify 阶段强制 |
-| 测试塞进单个 `@Test` | 拆分 9 个独立测试；Testcontainers `MySQLContainer` 自动启动；Mockito 覆盖 Filter/Servlet |
+| 测试塞进单个 `@Test` | 拆分独立测试，每个方法清理专用测试库夹具；Testcontainers `MySQLContainer` 自动启动；Mockito 覆盖 Filter/Servlet |
 
 ## 当前架构
 
@@ -43,7 +43,7 @@ flowchart TD
     Service --> StudentDao[StudentDao / Impl]
     Service --> AccountDao[AccountDao / Impl]
     Service --> Audit[AuditService\n同事务写 audit_log]
-    Service --> RateLimiter[utils.RateLimiter\n5/min 窗口 + 10 失败锁 15 min]
+    Filter --> RateLimiter[utils.RateLimiter\n独立 IP / 账号配额 · 10000 键容量上限]
     StudentDao --> Hibernate[Hibernate Session]
     AccountDao --> Hibernate
     Audit --> Hibernate
@@ -56,9 +56,9 @@ flowchart TD
     Factory --> Hibernate
 ~~~
 
-`WebSecurityFilter` 现在依次完成：安全响应头（按 `cookieSecure` 条件发 HSTS）→ 静态资源长缓存 → `/health` → `/register` 永久 410 → ERROR 派发渲染错误页 → 限流前置（仅 POST）→ 懒 Session → CSRF → 业务派发。所有路径上抛 `BusinessException` 时按状态码给对应中文标题（410/429/403/404 等）。
+`WebSecurityFilter` 现在依次完成：安全响应头（按 `cookieSecure` 条件发 HSTS）→ 静态资源长缓存 → `/health` → `/register` 永久 410 → ERROR 派发渲染错误页 → 惰性 Session → 实时身份/权限校验 → POST CSRF → 敏感请求限流 → 业务派发。所有路径上抛 `BusinessException` 时按状态码给对应中文标题（410/429/403/404 等）。
 
-`StudentServlet` 的两个 `switch` 现在都基于 `Route` 枚举：`Route.of(servletPath)` 集中了 path→view→title 的映射，错误回填分支不再硬编码路径字符串。
+`StudentServlet` 的 GET 分发及错误回填使用 `Route` 枚举，POST 处理仍按路径调用对应处理方法。CSV 导出当前页；重置失败重新加载目标学生。
 
 `AppLifecycle` 不再只注册 `studentService`：还把 `Limits.get()` 与 `cookieSecure` 布尔挂到 servlet context attribute，方便 JSP 用 EL 直接读。
 
@@ -143,3 +143,7 @@ erDiagram
 - [Maven发布下载](https://maven.apache.org/download.cgi)
 
 实际依赖可从 Maven Central 解析。未采用预览版、Hibernate 8 开发版、Spring Boot、前后端分离或微服务。
+
+## 2026-09-20 复核修复
+
+旧数据卷通过 `python scripts/migrate_database.py` 备份并补齐增量结构；不会依赖 init 脚本自动重跑。认证撤销不再有 30 秒窗口；低迭代密码重哈希采用旧哈希条件更新，不覆盖并发改密。CI 常规门禁与独立每周依赖安全扫描分开，实际验证记录见 acceptance.md。

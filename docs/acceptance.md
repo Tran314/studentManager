@@ -1,67 +1,57 @@
-# 实施与验收记录
+# 2026-09-20 优化实施与验收
 
-验收日期：2026-09-08（Asia/Hong_Kong）。
+本轮在 `main` 基线 `dcca644` 上修改，未提交到 Git、未配置远程仓库。源码在 D:\资料\studentManagerSix。
+历史记录保存于 `acceptance-2026-09-08.md`；旧的 77/85 项 HTTP 报告不能代表本轮结果。
 
-## 交付结果
+## 本次实际结果
 
-原项目已在原目录完成现代化改造，保留 JSP、Servlet、Service、DAO、Hibernate 和 MySQL 技术路线。旧工程完整保存在 legacy，另有原始 ZIP 快照。
-
-当前提供管理员/学生权限、注册登录退出、学生增删改查、姓名/学号搜索、分页、个人资料及密码修改。项目以 Maven WAR 构建，Docker Compose 运行独立应用和数据库服务。
-
-## 已执行验证
-
-| 检查 | 实际结果 |
+| 验证 | 结果 |
 |---|---|
-| Maven Wrapper | 容器执行 ./mvnw -v，确认 Maven 3.9.16、Java 25.0.4 |
-| 完整构建 | Docker 多阶段构建成功，生成 studentManagerSix.war |
-| 密码单元测试 | 2 个测试通过：独立随机盐、正确/错误密码、格式和参数边界 |
-| 输入校验单元测试 | 2 个测试通过：整数/页码边界、中文/Unicode和长度 |
-| MySQL 集成测试 | 1 个完整场景通过，0失败、0错误、0跳过，使用MySQL 9.7.1 |
-| HTTP 含重启验收 | 85 项断言通过，包括每次表单渲染和登录辅助检查 |
-| 页面修正后 HTTP 回归 | 77 项断言通过，测试记录清理成功 |
-| 浏览器真实交互 | 管理员登录、新增表单提交、取消删除与确认删除流程正常 |
-| 桌面显示 | 1440×1000视口检查登录页与学生列表，无整页横向溢出 |
-| 手机显示 | 390×844视口检查列表与新增表单，无整页横向溢出，表格区域可横向滚动，退出按钮可见 |
-| WAR 内容 | 无旧Hibernate/JDBC类，无Servlet/JSP/EL容器API重复打包 |
-| 日志检查 | 已采集应用日志中未发现演示密码或PBKDF2哈希 |
-| Compose 健康检查 | 已以 --wait 启动确认db/app均为healthy；探针使用JDK网络API，无curl依赖 |
+| JDK 25 主源码、测试源码、WAR 构建 | 通过 |
+| 单元测试 | 38 项，0 失败、0 错误、0 跳过 |
+| 真实 MySQL 集成测试 | 11 项，0 失败、0 错误、0 跳过 |
+| 外部 Compose 测试数据库路径 | 完整 verify 通过 |
+| 自动 Testcontainers 数据库路径 | 完整 verify 通过；覆盖修正后的 MySQL 9 配置 |
+| Spotless / Enforcer | 格式、版本、禁止 SNAPSHOT、依赖收敛均通过 |
+| JaCoCo | 总行覆盖 86.10%；服务实现 100%；Passwords 94.44%；Validation 100% |
+| SpotBugs + FindSecBugs | High 缺陷数 0，检查成功；工具输出有 invokedynamic 符号解析提示，不能据此保证不存在安全漏洞 |
+| Dockerfile 实际镜像构建 | 通过；测试镜像 studentmanagersix-app:optimization-20260920 |
+| 完整 HTTP 与重启 | 118 项通过，实际重启测试数据库与应用 |
+| 业务清理与审计 | 回到 10 个学生、11 个账号，留下 8 条审计记录 |
+| 旧库迁移 | 从仅有 001-schema 的有数据测试库升级；备份存在、学生/账号/标记保留、重复执行无变更 |
+| 配置与资源 | Compose 三种组合/YAML/XML/Python 语法检查通过，资源内容指纹吻合 |
+| 应用日志 | 最新测试容器日志无 ERROR/SEVERE/Exception 行，未发现测试密码或密码哈希 |
 
-## 关键场景
+## 修复重点
 
-- 注册强制学生角色，提交 role=ADMIN 无法获得管理权限。
-- 管理员新增→查询→详情→编辑→删除；学生注册→登录→修改本人资料→改密→重新登录→退出。
-- 学生请求管理员路由返回403；篡改profile请求学号仍只修改当前学生。
-- 未登录访问受保护页面跳转登录；登录更新Session ID。
-- 缺少CSRF返回403，GET删除返回405；重复学号409，不存在记录404，非法页码400。
-- 姓名包含HTML、下划线和百分号时，正确转义并按文字搜索；中文地址和emoji可保存。
-- 修改密码使另一已登录会话失效；删除账户后已有会话及原凭据不能继续使用。
-- 强制账户插入违反数据库约束，确认先写入的学生行回滚，后续连接仍可正常操作。
-- 超过末页自动定位末页，空查询显示空状态，删除末页记录后页码恢复有效范围。
-- 依次重启数据库和应用后，新建记录、修改后的资料和密码保留，示例初始化不会覆盖已有数据。
-- 验收创建的临时学生已清理，演示库保持原始十条学生资料和一个管理员账号。
+1. 修复导入、void mock 和 Enforcer 规则错误；统一 Hibernate 间接依赖版本；显式选择兼容 JDK 25 的 formatter 和 JaCoCo。
+2. PBKDF2-SHA256 恢复 600000 次；对低迭代历史密码原子升级，避免覆盖并发改密，保留旧密码登录兼容。
+3. 独立 IP/规范化账号限流、有容量上限、哈希并发上限；不信任客户端伪造的转发 IP 头。
+4. 取消身份缓存，下次请求即验证改密/重置/删除后的失效状态；未带 session 的 POST 不创建新 session。
+5. 修复重置密码错误回填、翻页参数和 CSV 页码，明确导出当前页；保留 BOM 和公式前缀防护。
+6. 测试按方法清理专用库，修正矛盾断言；新增 Service/Servlet/Filter/限流/密码策略回归。
+7. 可重复迁移脚本先备份再补结构；随机初始配置脚本不覆盖现有 .env。
+8. 格式化 Java/CSS/JS/JSP，刷新静态资源指纹；更新 CI、README、架构与方案说明。
+9. 修复 Testcontainers 自带 MySQL 旧参数、Tomcat 未配置的 JNDI Realm；镜像依赖缓存只预取应用依赖。
 
-## 联调中修正的问题
+## 环境与数据边界
 
-1. Jakarta EL 6针对record使用访问器名称解析属性，为Identity补充admin访问器。
-2. JSP父页面和静态包含文件分别声明UTF-8，消除部分中文被按Latin-1解码的问题。
-3. Jakarta EL API改为容器提供，避免Tags传递依赖把旧EL API放入WAR。
-4. 官方Tomcat镜像未包含curl，改用Java健康探针，并确认Compose实际healthy。
-5. 手机端提供可见退出按钮，桌面侧栏固定在视口内，长列表无需滚到底部才能退出。
-6. 提供本地SVG favicon，页面最终浏览器控制台无错误。
+本轮使用 `sms-opt-it`、`sms-opt-http`、`sms-opt-upgrade`、`sms-opt-upgrade-data` 独立测试项目，以及 Testcontainers 自动创建的临时数据库。
+原 `studentmanagersix_student-data` 数据卷未迁移、未删除、未写入。`.env` 未修改。测试结束后只清理本轮隔离测试容器与测试卷，保留测试镜像和 Maven 缓存。
 
-## 报告与复现
+Docker Desktop 启动时发现两处残留 AF_UNIX socket。仅停止失败的 Docker 进程，并将 `Docker/run` 和 `docker-secrets-engine` 的零字节 socket 目录改名留存；没有重置 Docker 或删除镜像/数据卷。
 
-- 单元报告：target/surefire-reports。
-- 数据库集成报告：target/failsafe-reports。
-- HTTP最终回归：target/http-acceptance.json。
-- 含重启记录：docs/evidence/http-acceptance-restart.json。
-- 完整操作步骤：README.md。
-- 技术解构与关系图：docs/architecture.md。
+## 复现与证据
 
-30分钟空闲超时已配置并核对；未通过实际等待30分钟进行计时验收。会话撤销已通过退出、改密和删除账户的实际请求验证。测试范围为本机课程/作品演示，不包含公网部署、压力测试或旧生产数据库迁移。
+- `mvn -B -ntp clean verify`：自动启动 Testcontainers MySQL。Windows 容器内运行时，Docker socket 映射与 TESTCONTAINERS_HOST_OVERRIDE 仅属于该测试环境。
+- `docker compose -f compose.test.yaml up --abort-on-container-exit --exit-code-from tests`：使用 tmpfs 测试库；TEST_DB_URL 仅允许名称以 test_ 开始或 _test 结尾的专用库。
+- `python scripts/smoke_test.py --restart`：在选定的 Compose 项目中执行完整 HTTP 与重启验收。
+- `python scripts/migrate_database.py`：维护窗口内备份并升级已存在的演示数据库。
+- 本次结果及日志位于 `docs/evidence/2026-09-20/`，当前 WAR 位于 `target/studentManagerSix.war`。
 
-## 恢复运行后的补充确认
+## 尚未声称完成的项目
 
-续接任务时Docker Desktop因残留AF_UNIX通信文件而无法启动，错误分别出现在dockerInference和Secrets Engine。停止已报错的Docker进程后，将仅含临时socket的目录改名保存，再启动Docker，未删除镜像或数据库卷。该现象与[Docker问题记录#460](https://github.com/docker/desktop-feedback/issues/460)描述一致。
-
-恢复后再次执行Compose --wait，应用和数据库均为healthy；实际请求确认健康接口、管理员登录和原始十条学生资料正常。最终WAR已从该运行容器中提取，包含Java健康探针。
+- 全量 NVD/CVE 扫描：已配置独立每周/手动工作流，本次未执行完整依赖漏洞库扫描。无远程仓库，因此 GitHub Actions 未运行。
+- HTTPS：叠加配置及数据卷身份已修正，配置语法通过，未进行真实证书/浏览器 HTTPS 验收。
+- 未做浏览器截图与多视口视觉验收，未做大数据量/并发压力基准。
+- 审计查询页、批量删除、完整弱口令词库、国际化、JSON/OpenAPI 属后续可选功能。

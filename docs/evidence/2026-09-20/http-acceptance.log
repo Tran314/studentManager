@@ -1,0 +1,5 @@
+ Container sms-opt-http-db-1 Restarting 
+ Container sms-opt-http-db-1 Started 
+ Container sms-opt-http-app-1 Restarting 
+ Container sms-opt-http-app-1 Started 
+PASS: 118 HTTP acceptance checks. Report: target/http-acceptance.json

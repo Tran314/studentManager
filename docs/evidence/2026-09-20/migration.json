@@ -1,0 +1,8 @@
+{
+  "project": "sms-opt-upgrade-data",
+  "source": "001-schema.sql only, populated test records",
+  "student_account_seed_preserved": true,
+  "backup_contains_original_rows": true,
+  "repeat_run_noop": true,
+  "index_and_audit_verified": true
+}

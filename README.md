@@ -1,178 +1,101 @@
 # 学生管理 SIX
 
-保留 JSP → Servlet → Service → DAO → Hibernate → MySQL 的学生管理项目，提供中文管理界面、管理员/学生权限、学生增删改查、搜索分页和个人资料维护。
+保留 JSP → Servlet → Service → DAO → Hibernate → MySQL 架构的中文学生管理应用。当前定位为本机教学、作品展示和小型内部管理；默认仅监听 `127.0.0.1`。
 
-## 一键启动（Windows / Docker Desktop）
+## 启动
 
-1. 启动 Docker Desktop，使用 Linux containers。
-2. 在本项目目录打开 PowerShell，首次配置：
+需要 Docker Desktop（Linux containers）和 Python 3.10+。首次在 PowerShell 执行：
 
-~~~powershell
-Copy-Item .env.example .env
-# 编辑 .env，把每一行 <set-...> 占位符替换为 24 位随机密码：
-#   -join ((33..126) | Get-Random -Count 24 | ForEach-Object {[char]$_})
-docker compose up --build -d
+```powershell
+python scripts/configure_demo.py
+docker compose up --build -d --wait
+```
+
+脚本生成随机密码并写入 `.env`，不打印密码、不覆盖已有配置。已有 `.env` 时直接使用原配置；不要重新复制覆盖。登录地址：`http://localhost:8080/studentManagerSix/`。管理员用户名为 `admin`，密码为 `.env` 的 `DEMO_ADMIN_PASSWORD`；演示学生用户名为 `1` 至 `10`，密码为 `DEMO_STUDENT_PASSWORD`。
+
+也可以复制 `.env.example` 后自行填写四个密码。示例文件密码值为空，未配置时 Compose 会拒绝启动。密码生成建议使用 `secrets.token_urlsafe(24)`，避免原样粘贴包含 `$`、引号或空格的随机字符造成 dotenv 转义问题。
+
+```powershell
 docker compose ps
-~~~
+docker compose logs --tail 80 app
+docker compose stop
+docker compose start
+```
 
-3. 等待 db 和 app 显示 healthy，然后打开 <http://localhost:8080/studentManagerSix/>。
+数据库不暴露主机端口。`studentmanagersix_student-data` 保存正式演示数据。`docker compose down` 保留数据卷；需要保留数据时不可使用 `down -v`。
 
-源码包只提供 `.env.example`，**不包含任何可用默认密码**。`.env.example` 中的占位符是非空字符串，docker compose 会原样使用——必须在第一次启动前完成替换。
+## 已有数据卷升级
 
-| 账号类型 | 登录名 | 初始密码 |
-|---|---|---|
-| 管理员 | admin | `.env` 中 `DEMO_ADMIN_PASSWORD` 的值 |
-| 示例学生 | 1 至 10 | `.env` 中 `DEMO_STUDENT_PASSWORD` 的值 |
+`docker/init/*.sql` 只在新数据卷初始化时执行。升级旧部署时，先停止应用、保留数据库，再执行迁移：
 
-首次运行需要联网下载镜像和 Maven 依赖，之后构建会复用缓存。
+```powershell
+docker compose stop app
+docker compose up -d db
+python scripts/migrate_database.py
+docker compose up --build -d --wait app
+```
 
-~~~powershell
-docker compose logs --tail 80 app    # 应用日志
-docker compose stop                 # 停止服务，保留数据
-docker compose start                # 恢复服务
-docker compose down                 # 移除本项目容器及网络，保留数据卷
-~~~
+迁移脚本检查旧表，先用 mysqldump 在 `work/backups/` 生成备份，再补充缺失的姓名索引与审计表，并验证结果。密码只从数据库容器环境传给 MySQL 客户端，不出现在命令行。重复运行已完成迁移时不会重复建表/索引。它不覆盖学生、账号或密码，也不迁移 `legacy` 原始数据库。
 
-项目不对主机暴露数据库端口；网页仅监听本机 127.0.0.1。若修改 APP_PORT，访问相应端口。已有数据保存在 Compose 的 student-data 卷中，不要在保留数据时使用 down -v。
+在维护窗口内单独运行迁移，不要并发执行。MySQL DDL 不承诺整体事务回滚；中断后先保留备份、检查错误，脚本支持重试缺失步骤。若需回滚数据，先停止应用，在隔离库验证备份恢复后再操作真实数据卷。
 
-> **已有数据卷升级**：MySQL 的 `/docker-entrypoint-initdb.d` 只在数据卷首次初始化时执行。本项目新增的 `002-index.sql`（学生姓名索引）和 `003-audit.sql`（审计表）不会自动应用到旧数据卷，需要手动跑一次：
-> ```powershell
-> docker compose exec db mysql -ustudent_app -p<your_db_password> student_manager < docker/init/002-index.sql
-> docker compose exec db mysql -ustudent_app -p<your_db_password> student_manager < docker/init/003-audit.sql
-> ```
-> 否则 Hibernate `validate` 会因缺 `audit_log` 表 / `idx_student_sname` 让 app 无法启动。
+## 功能与安全行为
 
-## 功能与权限
-
-- 管理员：新增学生（同时创建登录账号）、学生详情、编辑资料、删除学生及其账号、按学号精确搜索、按姓名 / 学号 / 年龄关键词搜索、页大小 10/20/50、升 / 降序、CSV 导出、**重置学生密码**（强制踢出旧会话）、审计日志落库。
-- 学生：学号登录、查看与编辑本人姓名 / 年龄 / 地址、修改密码。
-- 双方：修改密码、退出登录。管理员账号不属于学生档案，不能从学生删除入口删除。
-- 学号为 1–2147483647 的整数，创建后不可修改；姓名 1–20 字、年龄 1–150、地址不超过 50 字，密码 8–128 个字符；密码不得等于登录名、不得是常见弱口令。
-- 无匹配数据时展示空状态；负页码调整为 1，超过末页时回到末页，非整数页码返回 400。
-- **公开注册已关闭**（`/register` 永久 410）。学生账号由管理员在 `/students/create` 创建。
-- 密码变更通过账户 `auth_version` 使所有旧会话失效；删除账户后旧会话也立即失效；`Account.upgradeHash()` 透明升级老哈希迭代数（不踢会话）。
-- 登录成功变更 Session ID，30 分钟无访问后过期；修改操作仅接受带 CSRF 令牌的 POST；登录 / 改密受 RateLimiter 节流（5 次 / 分钟，连续 10 次失败锁 15 分钟）。
-
-### 验收
-
-- `python scripts/smoke_test.py --restart`：85 项 HTTP 断言，覆盖登录、CSRF、越权、HTML 转义、Cookie、登录退出、改密、限流、CSV 导出、管理员重置密码。
-- `mvn -B verify`：单元测试 + Spotless 格式检查 + SpotBugs（High 级别零容忍）+ JaCoCo 覆盖门禁（项目 ≥70%；Passwords / Validation / StudentServiceImpl ≥85%）。
-- `mvn -Psecurity verify`：额外跑 OWASP dependency-check，CVSS ≥7 阻断。
-- `docker compose -f compose.test.yaml up --abort-on-container-exit --exit-code-from tests`：真实 MySQL 集成测试（`*IT.java`）。
-
-## 技术栈与工程结构
-
-| 技术 | 固定版本 |
-|---|---|
-| Java | 25（构建与运行镜像当前内置 Temurin 25.0.4） |
-| Maven / Wrapper | 3.9.16 / 3.3.4 |
-| Tomcat | 11.0.25 |
-| Servlet / JSP / Jakarta Tags | 6.1 / 4.0 / 3.0 |
-| Hibernate ORM / Persistence | 7.4.7.Final / 3.2 |
-| MySQL / Connector/J | 9.7.1 / 9.7.0 |
-| JUnit Jupiter | 6.1.3 |
-| 静态分析 | Spotless 2.46.1、SpotBugs 4.9.6 + findsecbugs 1.13、OWASP dependency-check 12.1.1、JaCoCo 0.8.13、maven-enforcer 3.6.1 |
-| Tomcat Connector | `compression="on"`，minSize 1024，gzip `text/html, css, javascript, json, plain, xml` |
-| 静态资源缓存 | `Cache-Control: public, max-age=31536000, immutable`，文件名含 8 字符 SHA-256 前缀 |
-| 身份缓存 | Session 内 `identity` + `identityCheckedAt`，30s 内跳过 `account` 校验 |
-| 索引 | `student(sname)` B-tree（普通关键字走 `kw%` 前缀匹配，含 `%`/`_` 仍走字面子串） |
-
-~~~text
-src/main/java/com/
-  servlets/   HTTP请求与页面路由
-  service/    业务、密码验证、事务边界
-  dao/        参数化HQL与实体持久化
-  pojo/       Student、Account、Identity、PageResult
-  utils/      生命周期、Hibernate、校验、密码哈希、Filter
-src/main/webapp/
-  WEB-INF/views/   JSP页面（不可直接请求）
-  assets/          本地CSS与JavaScript
-src/test/          单元测试、真实MySQL集成测试
-docker/init/       仅供新建演示库使用的建表SQL
-scripts/           HTTP验收脚本
-docs/              技术解构与验收说明
-legacy/            本机保留的旧工程，不参与编译、打包或Docker构建
-~~~
-
-完整解构及架构图见 [docs/architecture.md](docs/architecture.md)。
-
-## Maven / IDEA / 本机 Tomcat
-
-Docker 构建无需在本机安装 JDK。若要在 IDEA 运行和调试：
-
-1. 安装 JDK 25，在 IDEA 打开 pom.xml 并导入 Maven 项目，Project SDK 设为25。
-2. 用新版 Maven 工程配置，不导入 legacy 内的 .iml、.classpath 或 .idea。
-3. PowerShell 运行：
-
-~~~powershell
-.\mvnw.cmd clean package
-~~~
-
-生成 target/studentManagerSix.war；将其部署到 Tomcat 11.0.25 的 webapps 目录。Unix/macOS 可使用 ./mvnw clean package。
-
-本机 MySQL 9.7.1 应先新建独立数据库和应用账户，选择该数据库后执行 docker/init/001-schema.sql；不要对旧 studentManager 数据库直接执行新脚本。新数据库还会自动应用 docker/init/002-index.sql（学生姓名索引）；**已有数据卷请手动执行 `docker/init/002-index.sql`**，因为 MySQL 的 `/docker-entrypoint-initdb.d` 仅在首次初始化时运行。Tomcat 启动环境配置：
-
-~~~text
-DB_URL=jdbc:mysql://localhost:3306/student_manager?connectionTimeZone=UTC
-DB_USER=student_app
-DB_PASSWORD=你的数据库密码
-SEED_DEMO=true
-DEMO_ADMIN_PASSWORD=至少8个字符的管理员密码
-DEMO_STUDENT_PASSWORD=至少8个字符的学生密码
-COOKIE_SECURE=false
-~~~
-
-Servlet/JSP API 标记为 provided，不装入 WAR。Hibernate 在启动时执行 validate，不自动创建或修改表。正式 HTTPS 接入时把 COOKIE_SECURE 设置为 true；当前交付定位为本机课程/作品演示。
+- 管理员：创建学生及账号、详情、编辑、删除、搜索、每页 10/20/50 条、姓名/年龄/学号排序、导出当前页 CSV、重置学生密码。
+- 学生：查看及编辑本人资料、修改本人密码。公开注册 `/register` 的 GET/POST 均返回 410。
+- 搜索：学号精确匹配；ASCII 字母数字姓名词使用前缀匹配，中文/混合词和转义通配字符使用子串匹配。
+- CSV 明确导出当前页，保留页码/筛选/排序，包含 UTF-8 BOM 与公式前缀防护。
+- 重置密码失败保留目标学生，纠正后可重新提交。所有变更与审计记录处于同一数据库事务。
+- 密码使用 PBKDF2-HMAC-SHA256、600,000 次迭代、独立随机盐。已有低迭代哈希在成功登录后原子升级，不覆盖并发改密；历史密码不因新弱口令规则被强制拒绝登录。
+- 每次认证请求检查 `auth_version`，改密、重置、删除账号后旧会话在下次请求失效。保留一次身份查询以保证撤销语义，不使用 30 秒缓存。
+- 登录旋转 Session ID；CSRF 保护所有 POST；会话 30 分钟空闲超时；安全头、JSP 输出转义和参数化查询保留。
+- 限流：每个传输层 IP 每分钟最多 60 次敏感请求；每个规范化账号的登录/改密各 5 次/分钟，创建/重置各 20 次/分钟；15 分钟内累计 10 次失败锁定相应账号操作 15 分钟，成功清除失败历史。
+- 限流最多保存 10,000 个键，容量满时拒绝新键；PBKDF2 最多同时执行 4 个，超出返回 429。限流为单进程状态，重启会清空，不能代替分布式部署的共享限流。
+- 不信任任意 `X-Forwarded-For`。通过 Caddy 的请求共享代理 IP 配额；扩大部署规模前应设计可信代理和统一限额。
 
 ## 验证
 
-### 单元测试
+本地 JDK 25 + Maven Wrapper：
 
-~~~powershell
-.\mvnw.cmd test
-~~~
+```powershell
+.\mvnw.cmd spotless:apply
+.\mvnw.cmd clean verify -DskipITs
+```
 
-### 隔离的真实 MySQL 集成测试
+不安装本地 JDK 时可使用 `maven:3.9.16-eclipse-temurin-25` 容器构建。`mvn verify` 在未设置 `TEST_DB_URL` 时使用 Testcontainers 创建真实 MySQL，需要 Docker；不会静默跳过 IT。
 
-~~~powershell
+```powershell
 docker compose -f compose.test.yaml up --abort-on-container-exit --exit-code-from tests
 docker compose -f compose.test.yaml down
-~~~
-
-测试使用 MySQL 9.7.1，独立临时数据库，不访问演示数据卷。每次运行前 down 移除旧测试容器，确保临时数据库重新初始化。Maven 缓存保留以加速再次执行。
-
-单元报告在 target/surefire-reports，集成报告在 target/failsafe-reports。普通 mvn verify 若未设置 TEST_DB_URL，会明确跳过真实数据库集成测试；以上 Compose 命令会启用它。
-
-### 页面、权限与重启验收
-
-应用启动后，使用 Python 3.10+：
-
-~~~powershell
-python scripts/smoke_test.py
 python scripts/smoke_test.py --restart
-~~~
+```
 
-脚本从 .env 读取管理员密码，创建并清理自己的临时学生记录，覆盖完整HTTP流程、CSRF、越权、HTML转义、Cookie、登录退出和改密。--restart 额外依次重启本项目数据库和应用并确认记录/密码保留，因此执行期间网页会短暂中断。报告输出到 target/http-acceptance.json。
+Compose IT 使用独立 tmpfs MySQL，与正式数据卷分离；每个测试清理自身测试库夹具。**TEST_DB_URL 只可指向专用测试库。** HTTP 脚本创建、修改并清理临时学生，`--restart` 额外重启所选 Compose 项目的数据库和应用，不适合有其他用户操作时执行。自定义项目时同时设置 `COMPOSE_PROJECT_NAME`、相应 Compose 环境和 `TEST_BASE_URL`，避免重启其他项目。
 
-实际验收结果见 [docs/acceptance.md](docs/acceptance.md)。
+HTTP 覆盖注册关闭、登录、CSRF、权限、分页、CSV、重置错误回填、立即撤销、限流、CRUD 与重启持久性。断言数量以每次 `target/http-acceptance.json` 为准，不使用旧报告固定数字。
 
-## 持续集成
+门禁：Spotless、Enforcer（版本/禁止 SNAPSHOT/依赖收敛）、Surefire/Failsafe、SpotBugs + FindSecBugs High、JaCoCo 总行覆盖 ≥70%，Passwords/Validation/StudentServiceImpl 各 ≥85%。
 
-GitHub Actions 在 `.github/workflows/ci.yml` 定义了三个串行 Job：
+独立依赖安全扫描：`mvn -Psecurity verify -DskipITs`。NVD API key 可通过 `NVD_API_KEY` 环境变量提供；无 key 或网络不可用时扫描可能限速/失败，不能视为通过。`.github/workflows/security.yml` 每周与手动执行该扫描，CVSS≥7 阻断；普通 CI 不声称已执行 dependency-check。仓库需配置 remote 并推送到 GitHub 后，Actions 才会运行。
 
-1. **build-and-static**：JDK 25 + `mvn -B verify -DskipITs`，跑 Surefire 单测、Spotless 格式检查、SpotBugs（High 级别零容忍 + findsecbugs 安全规则）、OWASP dependency-check（CVSS ≥7 阻断）、JaCoCo 报告。
-2. **integration**：`docker compose -f compose.test.yaml up --abort-on-container-exit --exit-code-from tests`，在临时 MySQL 上跑 `*IT.java`（`@EnabledIfEnvironmentVariable("TEST_DB_URL")`）。
-3. **acceptance**：`docker compose up -d --build`，等待 `/health`，跑 `python scripts/smoke_test.py --restart`（85 项 HTTP 断言），报告写入 `target/http-acceptance.json`。
+## HTTPS
 
-本地首次启用 Spotless 之前需要运行一次 `mvn spotless:apply` 一次性格式化存量代码，之后 `mvn spotless:check` 在 CI 与本地都会拒绝新增未格式化代码。
+在 `certs/fullchain.pem` 与 `certs/privkey.pem` 放置有效证书后：
 
-`.github/dependabot.yml` 配置了 Maven 与 GitHub Actions 周更；Tomcat/Hibernate 主版本升级由人工评估（已在 `ignore` 中标记）。CI 报告（Surefire/Failsafe/JaCoCo/SpotBugs/dependency-check/http-acceptance）均作为构件保留 14–30 天。
+```powershell
+docker compose -f compose.yaml -f compose.tls.yaml up -d --build --wait
+```
 
-## 数据初始化与原工程
+该叠加配置沿用 `studentmanagersix` 项目及其数据卷，启用 Secure Cookie、HSTS 和 Caddy，访问 `https://localhost/studentManagerSix/`。证书由使用者提供，不自动申请证书；`certs/` 不纳入 Git 或镜像。测试自签名证书与正式受信证书验收应分别记录。
 
-- 数据库容器只在新数据卷上执行建表SQL。
-- 应用使用一个事务创建 admin 和原 SQL 的十条学生资料；每个账户单独生成随机盐。
-- app_seed 标记与演示账号在同一事务写入，成功后不重复导入，不覆盖修改后的资料或密码。
-- 原始源码与JAR保存在本机 legacy 目录，另有完整原始ZIP快照。源码发行包不包含旧依赖及个人IDE设置。
-- 本次改造不迁移原库和三位明文密码；旧 Servlet/JSP URL 已由新路由替代。
+## 工程与维护
 
+Java 25、Tomcat 11.0.25、Hibernate 7.4.7.Final、MySQL 9.7.1、Connector/J 9.7.0、Maven 3.9.16；工具版本以 `pom.xml` 为准。显式锁定了兼容 JDK 25 的 Palantir formatter 与 JaCoCo，间接依赖由 dependencyManagement 收敛。
+
+`src/main` 为当前 WAR，`src/test` 为单元/集成测试，`docker/init` 为新库建表，`scripts` 为配置、迁移和验收工具。`legacy/` 保留原工程，不参与构建；`.env`、备份、证书和日志均忽略。
+
+CSS/JS 为可读源码。修改静态文件后执行 `python scripts/fingerprint_assets.py` 刷新内容指纹和 JSP 引用。只读事务用于降低脏检查成本，仍会提交事务；姓名 B-tree 索引不加速前置通配的中文子串搜索。
+
+本机 Tomcat 部署时须手动创建数据库并依次执行 `001-schema.sql`、`002-index.sql`、`003-audit.sql`；设置 DB_URL/DB_USER/DB_PASSWORD，以及需要演示数据时的 SEED_DEMO/DEMO_ADMIN_PASSWORD/DEMO_STUDENT_PASSWORD。Hibernate 只 validate，不自动改表。
+
+审计记录已落库；审计查询页面、批量删除、完整弱口令库、国际化和 JSON/OpenAPI 仍为可选后续工作。当前验证记录见 `docs/acceptance.md`。

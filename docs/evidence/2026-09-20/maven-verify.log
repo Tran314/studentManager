@@ -1,0 +1,159 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ----------------< com.studentmanager:studentManagerSix >----------------
+[INFO] Building studentManagerSix 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ war ]---------------------------------
+[INFO] 
+[INFO] --- spotless:2.46.1:apply (default-cli) @ studentManagerSix ---
+[INFO] Index file does not exist. Fallback to an empty index
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::staticFieldBase has been called by com.diffplug.spotless.java.ModuleHelper (file:/root/.m2/repository/com/diffplug/spotless/spotless-lib/3.3.1/spotless-lib-3.3.1.jar)
+WARNING: Please consider reporting this to the maintainers of class com.diffplug.spotless.java.ModuleHelper
+WARNING: sun.misc.Unsafe::staticFieldBase will be removed in a future release
+[INFO] Spotless.Java is keeping 33 files clean - 0 were changed to be clean, 33 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] 
+[INFO] --- clean:3.2.0:clean (default-clean) @ studentManagerSix ---
+[INFO] Deleting /project/target
+[INFO] 
+[INFO] --- enforcer:3.6.1:enforce (enforce-versions-and-bans) @ studentManagerSix ---
+[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireMavenVersion passed
+[INFO] Rule 1: org.apache.maven.enforcer.rules.version.RequireJavaVersion passed
+[INFO] Rule 2: org.apache.maven.enforcer.rules.BanDuplicatePomDependencyVersions passed
+[INFO] Rule 3: org.apache.maven.enforcer.rules.dependency.RequireReleaseDeps passed
+[INFO] Rule 4: org.apache.maven.enforcer.rules.dependency.DependencyConvergence passed
+[INFO] 
+[INFO] --- jacoco:0.8.15:prepare-agent (prepare-agent) @ studentManagerSix ---
+[INFO] argLine set to -javaagent:/root/.m2/repository/org/jacoco/org.jacoco.agent/0.8.15/org.jacoco.agent-0.8.15-runtime.jar=destfile=/project/target/jacoco.exec
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ studentManagerSix ---
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.16.0:compile (default-compile) @ studentManagerSix ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 25 source files with javac [debug release 25] to target/classes
+[INFO] 
+[INFO] --- resources:3.4.0:testResources (default-testResources) @ studentManagerSix ---
+[INFO] Copying 1 resource from src/test/resources to target/test-classes
+[INFO] Copying 3 resources from docker/init to target/test-classes/docker/init
+[INFO] 
+[INFO] --- compiler:3.16.0:testCompile (default-testCompile) @ studentManagerSix ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 8 source files with javac [debug release 25] to target/test-classes
+[INFO] /project/src/test/java/com/service/StudentServiceIT.java: /project/src/test/java/com/service/StudentServiceIT.java uses or overrides a deprecated API.
+[INFO] /project/src/test/java/com/service/StudentServiceIT.java: Recompile with -Xlint:deprecation for details.
+[INFO] 
+[INFO] --- surefire:3.6.0:test (default-test) @ studentManagerSix ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.service.StudentServiceTest
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (/root/.m2/repository/net/bytebuddy/byte-buddy-agent/1.17.5/byte-buddy-agent-1.17.5.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+13:33:31.001 WARN  [] com.service.StudentServiceImpl - Database constraint rejected an operation: student_sno_positive
+13:33:33.923 ERROR [] com.service.StudentServiceImpl - Transaction rollback failed (IllegalStateException)
+13:33:33.923 ERROR [] com.service.StudentServiceImpl - Database read failed (IllegalStateException)
+13:33:33.925 ERROR [] com.service.StudentServiceImpl - Transaction rollback failed (IllegalStateException)
+13:33:33.926 ERROR [] com.service.StudentServiceImpl - Database operation failed (IllegalStateException)
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.107 s -- in com.service.StudentServiceTest
+[INFO] Running com.servlets.StudentServletTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.267 s -- in com.servlets.StudentServletTest
+[INFO] Running com.utils.PasswordPolicyTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.162 s -- in com.utils.PasswordPolicyTest
+[INFO] Running com.utils.PasswordsTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.378 s -- in com.utils.PasswordsTest
+[INFO] Running com.utils.RateLimiterTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.021 s -- in com.utils.RateLimiterTest
+[INFO] Running com.utils.ValidationTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.utils.ValidationTest
+[INFO] Running com.utils.WebSecurityFilterTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.190 s -- in com.utils.WebSecurityFilterTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 38, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- war:3.5.1:war (default-war) @ studentManagerSix ---
+[INFO] Packaging webapp
+[INFO] Assembling webapp [studentManagerSix] in [/project/target/studentManagerSix]
+[INFO] Processing war project
+[INFO] Copying webapp resources [/project/src/main/webapp]
+[INFO] Building war: /project/target/studentManagerSix.war
+[INFO] 
+[INFO] --- failsafe:3.6.0:integration-test (default) @ studentManagerSix ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.service.StudentServiceIT
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by com.sun.jna.Native in an unnamed module (file:/root/.m2/repository/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+13:33:58.021 INFO  [] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+13:33:58.091 INFO  [] com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@58968733
+13:33:58.098 INFO  [] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+13:34:06.024 WARN  [] org.hibernate.orm.jdbc.error - HHH000247: ErrorCode: 3819, SQLState: HY000
+13:34:06.026 WARN  [] org.hibernate.orm.jdbc.error - Check constraint 'test_reject_99' is violated.
+13:34:06.057 WARN  [] com.service.StudentServiceImpl - Database constraint rejected an operation: test_reject_99
+13:34:10.052 INFO  [] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+13:34:10.057 INFO  [] com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 27.51 s -- in com.service.StudentServiceIT
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- failsafe:3.6.0:verify (default) @ studentManagerSix ---
+[INFO] 
+[INFO] --- spotless:2.46.1:check (spotless-check) @ studentManagerSix ---
+[INFO] Index file does not exist. Fallback to an empty index
+[INFO] Spotless.Java is keeping 33 files clean - 0 needs changes to be clean, 33 were already clean, 0 were skipped because caching determined they were already clean
+[INFO] 
+[INFO] --- jacoco:0.8.15:report (report) @ studentManagerSix ---
+[INFO] Loading execution data file /project/target/jacoco.exec
+[INFO] Analyzed bundle 'studentManagerSix' with 21 classes
+[INFO] 
+[INFO] --- jacoco:0.8.15:check (check-coverage) @ studentManagerSix ---
+[INFO] Loading execution data file /project/target/jacoco.exec
+[INFO] Analyzed bundle 'studentManagerSix' with 21 classes
+[INFO] All coverage checks have been met.
+[INFO] 
+[INFO] >>> spotbugs:4.9.6.0:check (default) > :spotbugs @ studentManagerSix >>>
+[INFO] 
+[INFO] --- spotbugs:4.9.6.0:spotbugs (spotbugs) @ studentManagerSix ---
+[INFO] Fork Value is true
+     [java] The following classes needed for analysis were missing:
+     [java]   makeConcatWithConstants
+     [java]   test
+     [java]   getAsLong
+     [java]   apply
+     [java]   toString
+     [java]   hashCode
+     [java]   equals
+[INFO] Done SpotBugs Analysis....
+[INFO] Skipping com.github.spotbugs:spotbugs-maven-plugin:4.9.6.0:spotbugs report goal
+[INFO] 
+[INFO] <<< spotbugs:4.9.6.0:check (default) < :spotbugs @ studentManagerSix <<<
+[INFO] 
+[INFO] 
+[INFO] --- spotbugs:4.9.6.0:check (default) @ studentManagerSix ---
+[INFO] BugInstance size is 0
+[INFO] Error size is 0
+[INFO] No errors/warnings found
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  01:04 min
+[INFO] Finished at: 2026-09-20T13:34:18Z
+[INFO] ------------------------------------------------------------------------
