@@ -1,10 +1,12 @@
 package com.utils;
 
-import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+import org.junit.jupiter.api.Test;
+
 class PasswordsTest {
-    @Test void independentSaltsAndVerification() {
+    @Test
+    void independentSaltsAndVerification() {
         String first = Passwords.hash("Correct-password-2026");
         String second = Passwords.hash("Correct-password-2026");
         assertNotEquals(first, second);
@@ -12,7 +14,9 @@ class PasswordsTest {
         assertFalse(Passwords.verify("Wrong-password-2026", first));
         assertFalse(Passwords.verify(null, first));
     }
-    @Test void rejectsMalformedAndUnboundedParameters() {
+
+    @Test
+    void rejectsMalformedAndUnboundedParameters() {
         assertFalse(Passwords.verify("abc", "plain"));
         assertFalse(Passwords.verify("abc", "pbkdf2-sha256$v1$2147483647$aaaa$bbbb"));
         assertFalse(Passwords.verify("abc", "pbkdf2-sha256$v2$600000$aaaa$bbbb"));
@@ -20,4 +24,3 @@ class PasswordsTest {
         assertThrows(com.service.BusinessException.class, () -> Passwords.hash("a".repeat(129)));
     }
 }
-
