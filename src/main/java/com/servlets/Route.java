@@ -13,7 +13,7 @@ import jakarta.servlet.http.HttpServletRequest;
 enum Route {
 
     HOME("", null, ""),
-    LOGIN("/login", "login", "欢迎回来"),
+    LOGIN("/login", "login", Messages.TITLE_LOGIN),
     LOGOUT("/logout", null, ""),
     HEALTH("/health", null, ""),
     STUDENTS("/students", "students", "学生管理"),

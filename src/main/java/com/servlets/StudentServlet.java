@@ -80,7 +80,7 @@ public class StudentServlet extends HttpServlet {
         if (route == null) {
             res.setStatus(405);
             res.setHeader("Allow", "POST");
-            view(req, res, "error", "请通过表单提交");
+            view(req, res, "error", Messages.ERR_METHOD_NOT_ALLOWED_GET);
             return;
         }
         if (route == Route.STUDENTS_EXPORT) {
@@ -92,7 +92,7 @@ public class StudentServlet extends HttpServlet {
         if (route.view == null) {
             res.setStatus(405);
             res.setHeader("Allow", "POST");
-            view(req, res, "error", "请通过表单提交");
+            view(req, res, "error", Messages.ERR_METHOD_NOT_ALLOWED_GET);
             return;
         }
 
@@ -141,7 +141,7 @@ public class StudentServlet extends HttpServlet {
                 default -> {
                     res.setStatus(405);
                     res.setHeader("Allow", "GET");
-                    view(req, res, "error", "不支持此操作");
+                    view(req, res, "error", Messages.ERR_METHOD_NOT_ALLOWED_POST);
                 }
             }
         } catch (BusinessException e) {
@@ -163,7 +163,7 @@ public class StudentServlet extends HttpServlet {
                     if (route == Route.PROFILE) {
                         req.setAttribute("student", service().find(identity(req).studentSno()));
                     }
-                    view(req, res, "student-form", "请检查学生资料");
+                    view(req, res, "student-form", Messages.TITLE_FORM_CHECK);
                 }
                 case STUDENT_RESET -> view(req, res, Route.STUDENT_RESET.view, Route.STUDENT_RESET.title);
                 default -> throw e;
