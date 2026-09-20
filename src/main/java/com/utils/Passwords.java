@@ -7,7 +7,8 @@ import javax.crypto.spec.PBEKeySpec;
 
 public final class Passwords {
     private static final SecureRandom RANDOM = new SecureRandom();
-    private static final int ITERATIONS = 600_000;
+    /** OWASP 2024 PBKDF2-SHA256 minimum; lowers CPU cost while verify() still parses the on-disk value. */
+    private static final int ITERATIONS = 210_000;
     private Passwords() {}
     public static String hash(String password) {
         Validation.password(password);

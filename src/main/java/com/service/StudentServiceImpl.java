@@ -31,8 +31,12 @@ public class StudentServiceImpl implements StudentService {
             }
         } catch (BusinessException e) { throw e;
         } catch (ConstraintViolationException e) {
-            LOG.warn("Database constraint rejected an operation");
-            throw new BusinessException(409, "学号或登录名已存在，请使用其他学号。");
+            String name = e.getConstraintName() == null ? "" : e.getConstraintName().toLowerCase();
+            if (name.contains("username") || name.contains("student_sno") || name.contains("primary")) {
+                throw new BusinessException(409, "学号或登录名已存在，请使用其他学号。");
+            }
+            LOG.warn("Database constraint rejected an operation: {}", name);
+            throw new BusinessException(400, "提交的数据不符合约束要求。");
         } catch (RuntimeException e) {
             // Do not log SQL bind values, entities or credentials.
             LOG.error("Database operation failed ({})", e.getClass().getSimpleName());

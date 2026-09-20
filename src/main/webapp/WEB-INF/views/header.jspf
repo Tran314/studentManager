@@ -16,7 +16,7 @@
 <c:if test="${identity.admin}"><a href="${pageContext.request.contextPath}/students">▦ <span>学生管理</span></a><a href="${pageContext.request.contextPath}/students/create">＋ <span>新增学生</span></a></c:if>
 <c:if test="${not identity.admin}"><a href="${pageContext.request.contextPath}/profile">◎ <span>个人中心</span></a></c:if>
 <a href="${pageContext.request.contextPath}/password">◇ <span>修改密码</span></a>
-</c:when><c:otherwise><a href="${pageContext.request.contextPath}/login">◎ <span>账号登录</span></a><a href="${pageContext.request.contextPath}/register">＋ <span>学生注册</span></a></c:otherwise></c:choose>
+</c:when><c:otherwise><a href="${pageContext.request.contextPath}/login">◎ <span>账号登录</span></a><p class="sidebar-note">没有账号？请联系管理员创建。</p></c:otherwise></c:choose>
 </nav>
 <div class="sidebar-bottom"><c:choose><c:when test="${not empty identity}">
 <div class="account-label"><span class="avatar"><c:out value="${identity.admin ? '管' : '学'}"/></span><div><strong><c:out value="${identity.username}"/></strong><small><c:out value="${identity.admin ? '管理员' : '学生账号'}"/></small></div></div>
