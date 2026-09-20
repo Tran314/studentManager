@@ -46,6 +46,8 @@ public final class Messages {
     // ---- Rate limit (P0-2) ----
     public static final String ERR_RATE_LIMIT = "尝试过于频繁，请稍后重试。";
     public static final String ERR_RATE_LIMIT_LOCKED = "连续失败次数过多，已临时锁定，请稍后重试。";
+    /** Prefix for the dynamic "请约 N 秒后再试" message; caller appends seconds + suffix. */
+    public static final String ERR_RATE_LIMIT_LOCKED_PREFIX = "尝试过于频繁，已临时锁定，请约 ";
 
     // ---- Password policy (P4-3) ----
     public static final String ERR_PASSWORD_LENGTH =

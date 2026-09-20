@@ -49,7 +49,7 @@ public final class RateLimiter {
         Long locked = LOCK_UNTIL.get(key);
         if (locked != null && locked > now) {
             long seconds = Math.max(1, (locked - now + 999) / 1000);
-            throw new BusinessException(429, "尝试过于频繁，已临时锁定，请约 " + seconds + " 秒后再试。");
+            throw new BusinessException(429, Messages.ERR_RATE_LIMIT_LOCKED_PREFIX + seconds + " 秒后再试。");
         }
 
         long cutoff = now - window.toMillis();
@@ -59,7 +59,7 @@ public final class RateLimiter {
                 hits.pollFirst();
             }
             if (hits.size() >= maxWindow) {
-                throw new BusinessException(429, "尝试过于频繁，请稍后重试。");
+                throw new BusinessException(429, Messages.ERR_RATE_LIMIT);
             }
             hits.addLast(now);
         }
@@ -74,7 +74,7 @@ public final class RateLimiter {
                 fails.clear();
                 LOCK_UNTIL.put(key, now + lockDuration.toMillis());
                 HITS.remove(key);
-                throw new BusinessException(429, "连续失败次数过多，已临时锁定，请稍后重试。");
+                throw new BusinessException(429, Messages.ERR_RATE_LIMIT_LOCKED);
             }
         }
     }
