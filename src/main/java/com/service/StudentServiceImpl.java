@@ -121,6 +121,8 @@ public class StudentServiceImpl implements StudentService {
 
     public void register(int sno, String name, String password, int age, String address, Identity actor) {
         validate(sno, name, age, address);
+        Passwords.assertNotEqualToLogin(password, String.valueOf(sno));
+        Passwords.assertSafe(password);
         String hash = Passwords.hash(password);
         tx(s -> {
             if (students.find(s, sno) != null || accounts.byUsername(s, String.valueOf(sno)) != null) {
@@ -175,6 +177,12 @@ public class StudentServiceImpl implements StudentService {
             if (!valid || account == null) {
                 throw new BusinessException(401, Messages.ERR_INVALID_CREDENTIAL);
             }
+            // P4-3: transparently rotate the hash to the current iteration count
+            // when the stored value is older. Does NOT bump authVersion, so
+            // existing sessions stay valid.
+            if (Passwords.needsRehash(account.getPasswordHash())) {
+                account.upgradeHash(Passwords.hash(password));
+            }
             return Identity.of(account);
         });
     }
@@ -190,7 +198,8 @@ public class StudentServiceImpl implements StudentService {
     }
 
     public void changePassword(Identity identity, String oldPassword, String newPassword) {
-        Validation.password(newPassword);
+        Passwords.assertNotEqualToLogin(newPassword, identity.username());
+        Passwords.assertSafe(newPassword);
         tx(s -> {
             Account account = accounts.byId(s, identity.id());
             if (account == null || account.getAuthVersion() != identity.authVersion()) {
@@ -214,7 +223,8 @@ public class StudentServiceImpl implements StudentService {
         if (admin == null || !admin.isAdmin()) {
             throw new BusinessException(403, Messages.ERR_ADMIN_ONLY_RESET);
         }
-        Validation.password(newPassword);
+        Passwords.assertNotEqualToLogin(newPassword, String.valueOf(sno));
+        Passwords.assertSafe(newPassword);
         tx(s -> {
             Student student = required(s, sno);
             Account account = accounts.byUsername(s, String.valueOf(sno));
