@@ -17,6 +17,9 @@ services:
       interval: 3s
       timeout: 5s
       retries: 40
+    restart: unless-stopped
+    security_opt:
+      - "no-new-privileges:true"
   tests:
     image: maven:3.9.16-eclipse-temurin-25
     working_dir: /project
@@ -31,6 +34,8 @@ services:
     depends_on:
       test-db:
         condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - "no-new-privileges:true"
 volumes:
   test-maven-cache:
-
