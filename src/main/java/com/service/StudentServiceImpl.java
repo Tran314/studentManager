@@ -1,6 +1,7 @@
 package com.service;
 
 import com.dao.AccountDao;
+import com.dao.AccountDaoHibernateImpl;
 import com.dao.StudentDao;
 import com.dao.StudentDaoHibernateImpl;
 import com.pojo.Account;
@@ -27,8 +28,16 @@ public class StudentServiceImpl implements StudentService {
     private final AccountDao accounts;
     private final String dummyHash = Passwords.hash("Dummy-login-password-9483");
 
+    /** Production constructor; wires default Hibernate-backed DAOs. */
     public StudentServiceImpl(SessionFactory factory) {
+        this(factory, new StudentDaoHibernateImpl(), new AccountDaoHibernateImpl());
+    }
+
+    /** Test constructor; accepts DAOs directly so unit tests can pass mocks. */
+    public StudentServiceImpl(SessionFactory factory, StudentDao students, AccountDao accounts) {
         this.factory = factory;
+        this.students = students;
+        this.accounts = accounts;
     }
 
     /** Read-only transaction; uses setDefaultReadOnly so Hibernate can skip dirty-check overhead. */
