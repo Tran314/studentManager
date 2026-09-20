@@ -17,6 +17,7 @@ enum Route {
     LOGOUT("/logout", null, ""),
     HEALTH("/health", null, ""),
     STUDENTS("/students", "students", "学生管理"),
+    STUDENTS_EXPORT("/students/export", null, ""),
     STUDENT_DETAIL("/students/detail", "detail", "学生详情"),
     STUDENT_CREATE("/students/create", "student-form", "新增学生"),
     STUDENT_EDIT("/students/edit", "student-form", "编辑学生"),

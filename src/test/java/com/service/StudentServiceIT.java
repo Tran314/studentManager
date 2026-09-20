@@ -70,7 +70,7 @@ class StudentServiceIT {
     @Order(1)
     void seedCreatesTenStudentsThenRegisterAddsOne() {
         service.seed("Admin-test-2026", TEST_PASSWORD);
-        assertEquals(10, service.search(null, "", 1).totalRows());
+        assertEquals(10, service.search(null, "", 1, 10, "sno", false).totalRows());
         service.register(11, "张三_<测试>%", TEST_PASSWORD, 21, "香港😀", TEST_ADMIN);
         assertEquals("张三_<测试>%", service.find(11).getSname());
     }
@@ -82,12 +82,12 @@ class StudentServiceIT {
         service.register(101, "alex", TEST_PASSWORD, 21, "addr-b", TEST_ADMIN);
         service.register(102, "bob", TEST_PASSWORD, 22, "addr-c", TEST_ADMIN);
 
-        assertEquals(2, service.search(null, "al", 1).totalRows());
-        PageResult<Student> empty = service.search(null, "missing", 1);
+        assertEquals(2, service.search(null, "al", 1, 10, "sno", false).totalRows());
+        PageResult<Student> empty = service.search(null, "missing", 1, 10, "sno", false);
         assertEquals(0, empty.totalRows());
         assertEquals(1, empty.page());
         // Out-of-range page snaps to last page, never to zero.
-        PageResult<Student> over = service.search(null, "", 999);
+        PageResult<Student> over = service.search(null, "", 999, 10, "sno", false);
         assertTrue(over.page() >= 1);
     }
 
@@ -97,12 +97,35 @@ class StudentServiceIT {
         service.register(200, "foo_bar", TEST_PASSWORD, 20, "", TEST_ADMIN);
         service.register(201, "50%off", TEST_PASSWORD, 20, "", TEST_ADMIN);
         // Underscore and percent in user input match literal characters, not SQL wildcards.
-        assertEquals(1, service.search(null, "_", 1).totalRows());
-        assertEquals(1, service.search(null, "%", 1).totalRows());
+        assertEquals(1, service.search(null, "_", 1, 10, "sno", false).totalRows());
+        assertEquals(1, service.search(null, "%", 1, 10, "sno", false).totalRows());
     }
 
     @Test
     @Order(4)
+    void pageSizeAndSortAreApplied() {
+        PageResult<Student> pageOfFive = service.search(null, "", 1, 5, "sno", false);
+        assertEquals(5, pageOfFive.pageSize());
+        assertTrue(pageOfFive.items().size() <= 5);
+
+        // Sort by age ascending: 20-year-olds come before 22-year-olds.
+        PageResult<Student> byAge = service.search(null, "", 1, 50, "age", false);
+        Integer firstAge = byAge.items().get(0).getAge();
+        Integer lastAge = byAge.items().get(byAge.items().size() - 1).getAge();
+        assertTrue(firstAge <= lastAge);
+
+        // Descending reverses the order.
+        PageResult<Student> byAgeDesc = service.search(null, "", 1, 50, "age", true);
+        assertEquals(lastAge, byAgeDesc.items().get(0).getAge());
+
+        // Invalid sort / page size fall back to defaults silently.
+        PageResult<Student> invalid = service.search(null, "", 1, 999, "garbage", false);
+        assertEquals(10, invalid.pageSize());
+        assertEquals(1, invalid.page());
+    }
+
+    @Test
+    @Order(5)
     void duplicateStudentIsRejected() {
         service.register(300, "first", TEST_PASSWORD, 20, "", TEST_ADMIN);
         BusinessException duplicate = assertThrows(BusinessException.class,
@@ -112,7 +135,7 @@ class StudentServiceIT {
     }
 
     @Test
-    @Order(5)
+    @Order(6)
     void passwordChangeInvalidatesOtherSessions() {
         service.register(400, "charlie", TEST_PASSWORD, 20, "", TEST_ADMIN);
         Identity sessionA = service.login("400", TEST_PASSWORD);
@@ -131,7 +154,7 @@ class StudentServiceIT {
     }
 
     @Test
-    @Order(6)
+    @Order(7)
     void adminPasswordResetKicksOutExistingSession() {
         service.register(500, "diana", TEST_PASSWORD, 20, "", TEST_ADMIN);
         Identity studentSession = service.login("500", TEST_PASSWORD);
@@ -146,7 +169,7 @@ class StudentServiceIT {
     }
 
     @Test
-    @Order(7)
+    @Order(8)
     void constraintFailureRollsBackBothWrites() {
         // Add a CHECK that rejects username='99' so the account insert fails
         // after the student insert. The whole tx must roll back.
@@ -172,7 +195,7 @@ class StudentServiceIT {
     }
 
     @Test
-    @Order(8)
+    @Order(9)
     void mutationsWriteAuditRows() {
         // Register, update, delete - each must leave a row in audit_log.
         service.register(600, "evan", TEST_PASSWORD, 20, "初始地址", TEST_ADMIN);

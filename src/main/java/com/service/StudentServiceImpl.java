@@ -102,9 +102,14 @@ public class StudentServiceImpl implements StudentService {
         }
     }
 
-    public PageResult<Student> search(Integer sno, String name, int page) {
+    public PageResult<Student> search(Integer sno, String name, int page, int pageSize, String sort, boolean descending) {
         String clean = Validation.text(name, "姓名", Limits.NAME_MAX, false);
-        return txRead(s -> students.search(s, sno, clean, page));
+        int safeSize = (pageSize == 10 || pageSize == 20 || pageSize == 50) ? pageSize : Limits.PAGE_SIZE;
+        String safeSort = switch (sort == null ? "" : sort) {
+            case "name", "age" -> sort;
+            default -> "sno";
+        };
+        return txRead(s -> students.search(s, sno, clean, page, safeSize, safeSort, descending));
     }
 
     private Student required(Session s, int sno) {

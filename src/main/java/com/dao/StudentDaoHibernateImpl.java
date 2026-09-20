@@ -2,7 +2,6 @@ package com.dao;
 
 import com.pojo.PageResult;
 import com.pojo.Student;
-import com.utils.Limits;
 import org.hibernate.Session;
 import org.hibernate.query.Query;
 
@@ -24,18 +23,28 @@ public class StudentDaoHibernateImpl implements StudentDao {
     }
 
     @Override
-    public PageResult<Student> search(Session session, Integer sno, String name, int requestedPage) {
+    public PageResult<Student> search(Session session, Integer sno, String name, int requestedPage, int pageSize, String sort, boolean descending) {
         String where = " where 1=1" + (sno == null ? "" : " and s.sno=:sno")
                 + (name.isEmpty() ? "" : " and s.sname like :name escape '!'");
+        String orderBy = " order by " + sortColumn(sort) + (descending ? " desc" : " asc");
+
         Query<Long> count = session.createQuery("select count(s) from Student s" + where, Long.class);
-        Query<Student> query = session.createQuery("from Student s" + where + " order by s.sno", Student.class);
+        Query<Student> query = session.createQuery("from Student s" + where + orderBy, Student.class);
         bind(count, sno, name);
         bind(query, sno, name);
         long total = count.getSingleResult();
-        int pages = (int) Math.max(1, (total + Limits.PAGE_SIZE - 1) / Limits.PAGE_SIZE);
+        int pages = (int) Math.max(1, (total + pageSize - 1) / pageSize);
         int page = Math.max(1, Math.min(requestedPage, pages));
-        return new PageResult<>(query.setFirstResult((page - 1) * Limits.PAGE_SIZE).setMaxResults(Limits.PAGE_SIZE)
-                .getResultList(), page, Limits.PAGE_SIZE, total, pages);
+        return new PageResult<>(query.setFirstResult((page - 1) * pageSize).setMaxResults(pageSize)
+                .getResultList(), page, pageSize, total, pages);
+    }
+
+    private String sortColumn(String sort) {
+        return switch (sort == null ? "" : sort) {
+            case "name" -> "s.sname";
+            case "age" -> "s.age";
+            default -> "s.sno";
+        };
     }
 
     private void bind(Query<?> query, Integer sno, String name) {

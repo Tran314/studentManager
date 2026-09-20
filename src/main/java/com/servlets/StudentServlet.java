@@ -15,7 +15,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
 @WebServlet(urlPatterns = {
-        "", "/login", "/logout", "/students", "/students/detail",
+        "", "/login", "/logout", "/students", "/students/detail", "/students/export",
         "/students/create", "/students/edit", "/students/reset", "/students/delete",
         "/profile", "/password", "/health"
 })
@@ -86,13 +86,10 @@ public class StudentServlet extends HttpServlet {
 
         switch (route) {
             case STUDENTS -> {
-                String snoText = req.getParameter("sno");
-                Integer number = snoText == null || snoText.isBlank() ? null : snoParam(req);
-                String name = Validation.text(req.getParameter("name"), "姓名", Limits.NAME_MAX, false);
-                req.setAttribute("result",
-                        service().search(number, name, Validation.page(req.getParameter("page"))));
+                req.setAttribute("result", searchStudents(req));
                 renderRoute(req, res, route);
             }
+            case STUDENTS_EXPORT -> writeCsv(req, res);
             case STUDENT_DETAIL -> {
                 req.setAttribute("student", service().find(snoParam(req)));
                 renderRoute(req, res, route);
@@ -226,5 +223,52 @@ public class StudentServlet extends HttpServlet {
         }
         req.setAttribute("rateLimitResult", "success");
         redirect(req, res, Route.STUDENTS.path, Messages.TITLE_PASSWORD_RESET);
+    }
+
+    private com.pojo.PageResult<com.pojo.Student> searchStudents(HttpServletRequest req) {
+        String snoText = req.getParameter("sno");
+        Integer number = snoText == null || snoText.isBlank() ? null : snoParam(req);
+        String name = Validation.text(req.getParameter("name"), "姓名", Limits.NAME_MAX, false);
+        int page = Validation.page(req.getParameter("page"));
+        int size = parsePageSize(req.getParameter("size"));
+        String sort = req.getParameter("sort");
+        boolean descending = "desc".equalsIgnoreCase(req.getParameter("dir"));
+        req.setAttribute("size", size);
+        req.setAttribute("sort", sort == null ? "sno" : sort);
+        req.setAttribute("dir", descending ? "desc" : "asc");
+        return service().search(number, name, page, size, sort, descending);
+    }
+
+    private static int parsePageSize(String raw) {
+        if (raw == null) {
+            return Limits.PAGE_SIZE;
+        }
+        return switch (raw) {
+            case "20" -> 20;
+            case "50" -> 50;
+            default -> Limits.PAGE_SIZE;
+        };
+    }
+
+    private void writeCsv(HttpServletRequest req, HttpServletResponse res) throws IOException {
+        com.pojo.PageResult<com.pojo.Student> result = searchStudents(req);
+        res.setContentType("text/csv; charset=UTF-8");
+        res.setHeader("Content-Disposition", "attachment; filename=\"students.csv\"");
+        res.getWriter().write("学号,姓名,年龄,地址\r\n");
+        for (com.pojo.Student s : result.items()) {
+            res.getWriter().write(s.getSno() + "," + csv(s.getSname()) + "," + s.getAge() + "," + csv(s.getAddress()) + "\r\n");
+        }
+    }
+
+    private static String csv(String value) {
+        if (value == null) {
+            return "";
+        }
+        // RFC 4180 quoting: wrap in quotes when the field contains a separator,
+        // a quote, or a newline; double any embedded quote.
+        if (value.indexOf(',') < 0 && value.indexOf('"') < 0 && value.indexOf('\n') < 0 && value.indexOf('\r') < 0) {
+            return value;
+        }
+        return "\"" + value.replace("\"", "\"\"") + "\"";
     }
 }
