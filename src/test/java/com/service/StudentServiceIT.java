@@ -46,7 +46,10 @@ class StudentServiceIT {
                     .withDatabaseName("student_manager_test")
                     .withUsername("student_test")
                     .withPassword("test-only-password")
-                    .withInitScripts("docker/init/001-schema.sql", "docker/init/002-index.sql");
+                    .withInitScripts(
+                            "docker/init/001-schema.sql",
+                            "docker/init/002-index.sql",
+                            "docker/init/003-audit.sql");
             mysql.start();
             url = mysql.getJdbcUrl() + "?allowPublicKeyRetrieval=true&sslMode=DISABLED";
             user = mysql.getUsername();
@@ -99,6 +102,25 @@ class StudentServiceIT {
         // Underscore and percent in user input match literal characters, not SQL wildcards.
         assertEquals(1, service.search(null, "_", 1, 10, "sno", false).totalRows());
         assertEquals(1, service.search(null, "%", 1, 10, "sno", false).totalRows());
+    }
+
+    @Test
+    @Order(4)
+    void chineseNamesUseSubstringMatch() {
+        // Review fix C-6: prefix-match optimization broke Chinese name
+        // lookups ('三' no longer matched '张三'). Pure ASCII continues
+        // to use the prefix path; anything with non-ASCII falls back to
+        // substring.
+        service.register(700, "张三", TEST_PASSWORD, 20, "beijing", TEST_ADMIN);
+        service.register(701, "李四", TEST_PASSWORD, 22, "shanghai", TEST_ADMIN);
+
+        assertEquals(1, service.search(null, "三", 1, 10, "sno", false).totalRows());
+        assertEquals(1, service.search(null, "张", 1, 10, "sno", false).totalRows());
+        assertEquals(2, service.search(null, "李", 1, 10, "sno", false).totalRows());
+        // Mixed ASCII + Chinese -> substring (not 'Zhang%').
+        assertEquals(1, service.search(null, "张三", 1, 10, "sno", false).totalRows());
+        // ASCII still uses prefix.
+        assertEquals(2, service.search(null, "ali", 1, 10, "sno", false).totalRows());
     }
 
     @Test

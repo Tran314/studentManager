@@ -57,15 +57,29 @@ public class StudentDaoHibernateImpl implements StudentDao {
         // Escape '!' first so the escape character itself is doubled, otherwise
         // the user-supplied wildcards below would not be honoured.
         String escaped = name.replace("!", "!!");
+        boolean hasWildcard = name.indexOf('%') >= 0 || name.indexOf('_') >= 0;
         String pattern;
-        if (name.indexOf('%') < 0 && name.indexOf('_') < 0) {
-            // Plain keyword -> prefix match uses idx_student_sname (O(log n) B-tree range).
+        if (!hasWildcard && isAsciiLettersOrDigits(name)) {
+            // Pure ASCII keyword -> prefix match uses idx_student_sname (O(log n)
+            // B-tree range scan). Western names like "luc" still find "lucy2".
             pattern = escaped + "%";
         } else {
-            // User explicitly typed a wildcard; preserve substring-match semantics
-            // for compatibility with the LIKE-escape behavior the integration tests assert.
+            // Chinese / mixed / explicit-wildcard -> substring match. The
+            // index can't help with leading-% patterns anyway, and users
+            // expect "三" to find "张三" rather than only names that start
+            // with the character.
             pattern = "%" + escaped.replace("%", "!%").replace("_", "!_") + "%";
         }
         query.setParameter("name", pattern);
+    }
+
+    private static boolean isAsciiLettersOrDigits(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) {
+                return false;
+            }
+        }
+        return true;
     }
 }
