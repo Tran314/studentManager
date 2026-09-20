@@ -1,6 +1,7 @@
 package com.utils;
 
 import com.pojo.Account;
+import com.pojo.AuditEntry;
 import com.pojo.Student;
 import org.hibernate.SessionFactory;
 import org.hibernate.cfg.Configuration;
@@ -14,6 +15,7 @@ public final class HibernateSessionFactoryUtil {
         return new Configuration()
                 .addAnnotatedClass(Student.class)
                 .addAnnotatedClass(Account.class)
+                .addAnnotatedClass(AuditEntry.class)
                 .setProperty("hibernate.connection.driver_class", "com.mysql.cj.jdbc.Driver")
                 .setProperty("hibernate.connection.url", url)
                 .setProperty("hibernate.connection.username", user)
