@@ -1,0 +1,19 @@
+# Force LF in repository, regardless of platform; matches .editorconfig.
+* text=auto eol=lf
+
+# These must be checked out with CRLF on Windows.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.pdf binary
+*.xlsx binary
+*.jar binary
+*.war binary
