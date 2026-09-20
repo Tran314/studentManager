@@ -20,6 +20,7 @@ enum Route {
     STUDENT_DETAIL("/students/detail", "detail", "学生详情"),
     STUDENT_CREATE("/students/create", "student-form", "新增学生"),
     STUDENT_EDIT("/students/edit", "student-form", "编辑学生"),
+    STUDENT_RESET("/students/reset", "student-reset", "重置学生密码"),
     STUDENT_DELETE("/students/delete", null, ""),
     PROFILE("/profile", "student-form", "个人中心"),
     PASSWORD("/password", "password", "修改密码");
@@ -49,6 +50,10 @@ enum Route {
 
     boolean isCreating() {
         return this == STUDENT_CREATE;
+    }
+
+    boolean isStudentMutation() {
+        return this == STUDENT_CREATE || this == STUDENT_EDIT || this == STUDENT_RESET || this == PROFILE;
     }
 
     /** Landing redirect target for unauthenticated vs. admin vs. student users. */

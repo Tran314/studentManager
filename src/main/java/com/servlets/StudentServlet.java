@@ -15,7 +15,8 @@ import java.io.IOException;
 
 @WebServlet(urlPatterns = {
         "", "/login", "/logout", "/students", "/students/detail",
-        "/students/create", "/students/edit", "/students/delete", "/profile", "/password", "/health"
+        "/students/create", "/students/edit", "/students/reset", "/students/delete",
+        "/profile", "/password", "/health"
 })
 public class StudentServlet extends HttpServlet {
 
@@ -99,6 +100,10 @@ public class StudentServlet extends HttpServlet {
                 req.setAttribute("creating", true);
                 renderRoute(req, res, route);
             }
+            case STUDENT_RESET -> {
+                req.setAttribute("student", service().find(snoParam(req)));
+                renderRoute(req, res, route);
+            }
             case STUDENT_EDIT, PROFILE -> {
                 int number = route == Route.PROFILE ? identity(req).studentSno() : snoParam(req);
                 req.setAttribute("student", service().find(number));
@@ -122,6 +127,7 @@ public class StudentServlet extends HttpServlet {
                     service().delete(snoParam(req), identity(req));
                     redirect(req, res, Route.STUDENTS.path, "学生及关联账号已删除。");
                 }
+                case "/students/reset" -> handleResetPassword(req, res);
                 case "/password" -> handlePassword(req, res);
                 default -> {
                     res.setStatus(405);
@@ -150,6 +156,7 @@ public class StudentServlet extends HttpServlet {
                     }
                     view(req, res, "student-form", "请检查学生资料");
                 }
+                case STUDENT_RESET -> view(req, res, Route.STUDENT_RESET.view, Route.STUDENT_RESET.title);
                 default -> throw e;
             }
         }
@@ -202,5 +209,21 @@ public class StudentServlet extends HttpServlet {
         req.setAttribute("rateLimitResult", "success");
         req.getSession().invalidate();
         redirect(req, res, Route.LOGIN.path, "密码已修改，请重新登录。");
+    }
+
+    private void handleResetPassword(HttpServletRequest req, HttpServletResponse res) throws IOException {
+        try {
+            String newPassword = req.getParameter("newPassword");
+            String confirm = req.getParameter("confirmPassword");
+            if (newPassword == null || !newPassword.equals(confirm)) {
+                throw new BusinessException(400, "两次输入的新密码不一致。");
+            }
+            service().resetPassword(identity(req), snoParam(req), newPassword);
+        } catch (BusinessException e) {
+            req.setAttribute("rateLimitResult", "failure");
+            throw e;
+        }
+        req.setAttribute("rateLimitResult", "success");
+        redirect(req, res, Route.STUDENTS.path, "学生密码已重置，该学生的其他会话已失效。");
     }
 }
