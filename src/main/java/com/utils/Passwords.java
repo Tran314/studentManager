@@ -9,8 +9,10 @@ import javax.crypto.spec.PBEKeySpec;
 
 public final class Passwords {
 
-    /** OWASP 2024 PBKDF2-SHA256 minimum; lowers CPU cost while verify() still parses the on-disk value. */
-    private static final int ITERATIONS = 210_000;
+    /** PBKDF2-HMAC-SHA256 baseline; existing weaker hashes upgrade after successful login. */
+    private static final int ITERATIONS = 600_000;
+
+    private static final java.util.concurrent.Semaphore HASH_SLOTS = new java.util.concurrent.Semaphore(4);
 
     /**
      * Curated subset of the most-leaked passwords. A real deployment would
@@ -18,22 +20,56 @@ public final class Passwords {
      * common offenders without bloating the WAR.
      */
     private static final Set<String> COMMON = Set.of(
-            "password", "password1", "password123", "p@ssw0rd", "p@ssword1",
-            "12345678", "123456789", "1234567890", "00000000", "11111111",
-            "qwerty", "qwerty123", "abc12345", "abcdefgh", "asdfghjk",
-            "admin", "admin123", "admin1234", "root", "root123",
-            "welcome", "welcome1", "letmein", "iloveyou", "monkey123",
-            "dragon", "master", "starwars", "trustno1", "bailey",
-            "student", "student123", "teacher", "teacher123"
-    ).stream().map(String::toLowerCase).collect(Collectors.toUnmodifiableSet());
+                    "password",
+                    "password1",
+                    "password123",
+                    "p@ssw0rd",
+                    "p@ssword1",
+                    "12345678",
+                    "123456789",
+                    "1234567890",
+                    "00000000",
+                    "11111111",
+                    "qwerty",
+                    "qwerty123",
+                    "abc12345",
+                    "abcdefgh",
+                    "asdfghjk",
+                    "admin",
+                    "admin123",
+                    "admin1234",
+                    "root",
+                    "root123",
+                    "welcome",
+                    "welcome1",
+                    "letmein",
+                    "iloveyou",
+                    "monkey123",
+                    "dragon",
+                    "master",
+                    "starwars",
+                    "trustno1",
+                    "bailey",
+                    "student",
+                    "student123",
+                    "teacher",
+                    "teacher123")
+            .stream()
+            .map(value -> value.toLowerCase(Locale.ROOT))
+            .collect(Collectors.toUnmodifiableSet());
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private Passwords() {
-    }
+    private Passwords() {}
 
     public static String hash(String password) {
         assertSafe(password);
+        return hashVerifiedPassword(password);
+    }
+
+    /** Re-encode an already verified legacy password without imposing a new enrollment policy. */
+    public static String hashVerifiedPassword(String password) {
+        Validation.password(password);
         byte[] salt = new byte[16];
         RANDOM.nextBytes(salt);
         return "pbkdf2-sha256$v1$" + ITERATIONS + "$"
@@ -56,7 +92,8 @@ public final class Passwords {
             }
             byte[] salt = Base64.getDecoder().decode(parts[3]);
             byte[] expected = Base64.getDecoder().decode(parts[4]);
-            return salt.length == 16 && expected.length == 32
+            return salt.length == 16
+                    && expected.length == 32
                     && MessageDigest.isEqual(expected, derive(password, salt, iterations));
         } catch (IllegalArgumentException e) {
             return false;
@@ -90,26 +127,32 @@ public final class Passwords {
      */
     public static void assertSafe(String password) {
         Validation.password(password);
-        if (COMMON.contains(password.toLowerCase())) {
+        if (COMMON.contains(password.toLowerCase(Locale.ROOT))) {
             throw new BusinessException(400, Messages.ERR_PASSWORD_COMMON);
         }
     }
 
     /** Reject passwords equal to the login name or student number. */
     public static void assertNotEqualToLogin(String password, String loginHint) {
-        if (loginHint != null && password.equalsIgnoreCase(loginHint)) {
+        if (loginHint != null && password != null && password.equalsIgnoreCase(loginHint)) {
             throw new BusinessException(400, Messages.ERR_PASSWORD_USERNAME);
         }
     }
 
     private static byte[] derive(String password, byte[] salt, int iterations) {
+        if (!HASH_SLOTS.tryAcquire()) {
+            throw new BusinessException(429, Messages.ERR_RATE_LIMIT);
+        }
         PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, iterations, 256);
         try {
-            return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
+            return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+                    .generateSecret(spec)
+                    .getEncoded();
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("Password hashing unavailable", e);
         } finally {
             spec.clearPassword();
+            HASH_SLOTS.release();
         }
     }
 }

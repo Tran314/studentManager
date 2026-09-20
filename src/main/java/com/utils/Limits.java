@@ -24,8 +24,7 @@ public final class Limits {
         return INSTANCE;
     }
 
-    private Limits() {
-    }
+    private Limits() {}
 
     public int getPageSize() {
         return PAGE_SIZE;

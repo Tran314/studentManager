@@ -14,11 +14,22 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
-@WebServlet(urlPatterns = {
-        "", "/login", "/logout", "/students", "/students/detail", "/students/export",
-        "/students/create", "/students/edit", "/students/reset", "/students/delete",
-        "/profile", "/password", "/health"
-})
+@WebServlet(
+        urlPatterns = {
+            "",
+            "/login",
+            "/logout",
+            "/students",
+            "/students/detail",
+            "/students/export",
+            "/students/create",
+            "/students/edit",
+            "/students/reset",
+            "/students/delete",
+            "/profile",
+            "/password",
+            "/health"
+        })
 public class StudentServlet extends HttpServlet {
 
     private StudentService service() {
@@ -43,14 +54,16 @@ public class StudentServlet extends HttpServlet {
         req.getRequestDispatcher("/WEB-INF/views/" + page + ".jsp").forward(req, res);
     }
 
-    private void redirect(HttpServletRequest req, HttpServletResponse res, String route, String flash) throws IOException {
+    private void redirect(HttpServletRequest req, HttpServletResponse res, String route, String flash)
+            throws IOException {
         if (flash != null) {
             req.getSession().setAttribute("flash", flash);
         }
         res.sendRedirect(req.getContextPath() + route);
     }
 
-    private void renderRoute(HttpServletRequest req, HttpServletResponse res, Route route) throws ServletException, IOException {
+    private void renderRoute(HttpServletRequest req, HttpServletResponse res, Route route)
+            throws ServletException, IOException {
         view(req, res, route.view, route.title);
     }
 
@@ -165,7 +178,10 @@ public class StudentServlet extends HttpServlet {
                     }
                     view(req, res, "student-form", Messages.TITLE_FORM_CHECK);
                 }
-                case STUDENT_RESET -> view(req, res, Route.STUDENT_RESET.view, Route.STUDENT_RESET.title);
+                case STUDENT_RESET -> {
+                    req.setAttribute("student", service().find(snoParam(req)));
+                    view(req, res, Route.STUDENT_RESET.view, Route.STUDENT_RESET.title);
+                }
                 default -> throw e;
             }
         }
@@ -186,7 +202,8 @@ public class StudentServlet extends HttpServlet {
         redirect(req, res, identity.isAdmin() ? Route.STUDENTS.path : Route.PROFILE.path, Messages.TITLE_LOGIN_SUCCESS);
     }
 
-    private void handleStudentMutation(HttpServletRequest req, HttpServletResponse res, String route) throws IOException {
+    private void handleStudentMutation(HttpServletRequest req, HttpServletResponse res, String route)
+            throws IOException {
         boolean creating = "/students/create".equals(route);
         int number = "/profile".equals(route) ? identity(req).studentSno() : snoParam(req);
         String name = Validation.text(req.getParameter("sname"), "姓名", Limits.NAME_MAX, true);
@@ -208,9 +225,7 @@ public class StudentServlet extends HttpServlet {
                     || !req.getParameter("newPassword").equals(req.getParameter("confirmPassword"))) {
                 throw new BusinessException(400, Messages.ERR_PASSWORD_MISMATCH);
             }
-            service().changePassword(identity(req),
-                    req.getParameter("oldPassword"),
-                    req.getParameter("newPassword"));
+            service().changePassword(identity(req), req.getParameter("oldPassword"), req.getParameter("newPassword"));
         } catch (BusinessException e) {
             req.setAttribute("rateLimitResult", "failure");
             throw e;
@@ -269,7 +284,9 @@ public class StudentServlet extends HttpServlet {
         res.getWriter().write("\uFEFF");
         res.getWriter().write("学号,姓名,年龄,地址\r\n");
         for (com.pojo.Student s : result.items()) {
-            res.getWriter().write(s.getSno() + "," + csv(s.getSname()) + "," + s.getAge() + "," + csv(s.getAddress()) + "\r\n");
+            res.getWriter()
+                    .write(s.getSno() + "," + csv(s.getSname()) + "," + s.getAge() + "," + csv(s.getAddress())
+                            + "\r\n");
         }
     }
 

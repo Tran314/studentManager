@@ -15,13 +15,11 @@ package com.utils;
  */
 public final class Messages {
 
-    private Messages() {
-    }
+    private Messages() {}
 
     // ---- Service-layer error messages ----
     public static final String ERR_INVALID_SNO = "学号必须为正整数。";
-    public static final String ERR_AGE_RANGE =
-            "年龄必须为" + Limits.AGE_MIN + "–" + Limits.AGE_MAX + "的整数。";
+    public static final String ERR_AGE_RANGE = "年龄必须为" + Limits.AGE_MIN + "–" + Limits.AGE_MAX + "的整数。";
     public static final String ERR_DUPLICATE_SNO = "学号已存在，请使用其他学号。";
     public static final String ERR_DUPLICATE_LOGIN = "学号或登录名已存在，请使用其他学号。";
     public static final String ERR_CONSTRAINT = "提交的数据不符合约束要求。";
@@ -40,8 +38,7 @@ public final class Messages {
     public static final String ERR_CSRF = "表单已过期，请刷新页面后重试。";
     public static final String ERR_METHOD_NOT_ALLOWED_GET = "请通过表单提交";
     public static final String ERR_METHOD_NOT_ALLOWED_POST = "不支持此操作";
-    public static final String ERR_PUBLIC_REGISTRATION_CLOSED =
-            "公开注册已关闭。学生账号由管理员创建，请联系管理员。";
+    public static final String ERR_PUBLIC_REGISTRATION_CLOSED = "公开注册已关闭。学生账号由管理员创建，请联系管理员。";
 
     // ---- Rate limit (P0-2) ----
     public static final String ERR_RATE_LIMIT = "尝试过于频繁，请稍后重试。";

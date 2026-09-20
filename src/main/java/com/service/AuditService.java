@@ -12,11 +12,12 @@ public interface AuditService {
 
     /** Actions tracked by the audit log; kept as constants so logs are searchable. */
     String ACTION_CREATE = "CREATE";
+
     String ACTION_UPDATE = "UPDATE";
     String ACTION_DELETE = "DELETE";
     String ACTION_PASSWORD_CHANGE = "PASSWORD_CHANGE";
     String ACTION_PASSWORD_RESET = "PASSWORD_RESET";
 
-    void record(Session session, Identity actor, String action,
-            Integer targetSno, String targetUsername, String details);
+    void record(
+            Session session, Identity actor, String action, Integer targetSno, String targetUsername, String details);
 }

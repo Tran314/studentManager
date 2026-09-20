@@ -8,8 +8,7 @@ import org.hibernate.cfg.Configuration;
 
 public final class HibernateSessionFactoryUtil {
 
-    private HibernateSessionFactoryUtil() {
-    }
+    private HibernateSessionFactoryUtil() {}
 
     public static SessionFactory create(String url, String user, String password) {
         return new Configuration()
@@ -20,7 +19,8 @@ public final class HibernateSessionFactoryUtil {
                 .setProperty("hibernate.connection.url", url)
                 .setProperty("hibernate.connection.username", user)
                 .setProperty("hibernate.connection.password", password)
-                .setProperty("hibernate.connection.provider_class",
+                .setProperty(
+                        "hibernate.connection.provider_class",
                         "org.hibernate.hikaricp.internal.HikariCPConnectionProvider")
                 // Hikari returns connections with autoCommit already off; Hibernate then
                 // skips its own setAutoCommit calls, saving one round-trip per tx.

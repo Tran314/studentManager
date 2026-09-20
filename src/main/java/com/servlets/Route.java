@@ -1,6 +1,7 @@
 package com.servlets;
 
 import com.pojo.Identity;
+import com.utils.Messages;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
@@ -11,7 +12,6 @@ import jakarta.servlet.http.HttpServletRequest;
  * GET path returns no view (logout, health, delete) keep {@code view = null}.
  */
 enum Route {
-
     HOME("", null, ""),
     LOGIN("/login", "login", Messages.TITLE_LOGIN),
     LOGOUT("/logout", null, ""),

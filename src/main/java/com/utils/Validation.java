@@ -4,8 +4,7 @@ import com.service.BusinessException;
 
 public final class Validation {
 
-    private Validation() {
-    }
+    private Validation() {}
 
     public static String text(String value, String label, int max, boolean required) {
         String clean = value == null ? "" : value.strip();
@@ -42,9 +41,7 @@ public final class Validation {
     }
 
     public static void password(String password) {
-        if (password == null
-                || password.length() < Limits.PASSWORD_MIN
-                || password.length() > Limits.PASSWORD_MAX) {
+        if (password == null || password.length() < Limits.PASSWORD_MIN || password.length() > Limits.PASSWORD_MAX) {
             throw new BusinessException(400, Messages.ERR_PASSWORD_LENGTH);
         }
     }

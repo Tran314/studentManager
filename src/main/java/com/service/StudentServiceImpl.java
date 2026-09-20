@@ -79,8 +79,9 @@ public class StudentServiceImpl implements StudentService {
         } catch (BusinessException e) {
             throw e;
         } catch (ConstraintViolationException e) {
-            String name = e.getConstraintName() == null ? "" : e.getConstraintName().toLowerCase();
-            if (name.contains("username") || name.contains("student_sno") || name.contains("primary")) {
+            String name =
+                    e.getConstraintName() == null ? "" : e.getConstraintName().toLowerCase();
+            if (e.getSQLException() != null && e.getSQLException().getErrorCode() == 1062) {
                 throw new BusinessException(409, Messages.ERR_DUPLICATE_LOGIN);
             }
             LOG.warn("Database constraint rejected an operation: {}", name);
@@ -102,13 +103,15 @@ public class StudentServiceImpl implements StudentService {
         }
     }
 
-    public PageResult<Student> search(Integer sno, String name, int page, int pageSize, String sort, boolean descending) {
+    public PageResult<Student> search(
+            Integer sno, String name, int page, int pageSize, String sort, boolean descending) {
         String clean = Validation.text(name, "姓名", Limits.NAME_MAX, false);
         int safeSize = (pageSize == 10 || pageSize == 20 || pageSize == 50) ? pageSize : Limits.PAGE_SIZE;
-        String safeSort = switch (sort == null ? "" : sort) {
-            case "name", "age" -> sort;
-            default -> "sno";
-        };
+        String safeSort =
+                switch (sort == null ? "" : sort) {
+                    case "name", "age" -> sort;
+                    default -> "sno";
+                };
         return txRead(s -> students.search(s, sno, clean, page, safeSize, safeSort, descending));
     }
 
@@ -147,7 +150,12 @@ public class StudentServiceImpl implements StudentService {
             Student before = required(s, sno);
             String oldName = before.getSname();
             before.update(name.strip(), age, address == null ? "" : address.strip());
-            audit.record(s, actor, AuditService.ACTION_UPDATE, sno, null,
+            audit.record(
+                    s,
+                    actor,
+                    AuditService.ACTION_UPDATE,
+                    sno,
+                    null,
                     "from='" + oldName + "' to='" + before.getSname() + "'");
             return null;
         });
@@ -185,7 +193,7 @@ public class StudentServiceImpl implements StudentService {
             // Capture the stored hash alongside the identity so we can decide
             // post-tx whether to upgrade. The txRead session is read-only and
             // would silently drop a write inside this lambda.
-            return new Object[]{Identity.of(account), account.getPasswordHash(), account.getId()};
+            return new Object[] {Identity.of(account), account.getPasswordHash(), account.getId()};
         });
         Identity identity = (Identity) result[0];
         String storedHash = (String) result[1];
@@ -195,17 +203,21 @@ public class StudentServiceImpl implements StudentService {
         // stronger, not weaker). authVersion is NOT bumped, so other sessions
         // for the same user remain valid.
         if (Passwords.needsRehash(storedHash)) {
-            upgradeHashInNewTx(accountId, password);
+            upgradeHashInNewTx(accountId, storedHash, password);
         }
         return identity;
     }
 
-    private void upgradeHashInNewTx(long accountId, String password) {
+    private void upgradeHashInNewTx(long accountId, String originalHash, String password) {
+        String upgraded = Passwords.hashVerifiedPassword(password);
         tx(s -> {
-            Account a = accounts.byId(s, accountId);
-            if (a != null && Passwords.needsRehash(a.getPasswordHash())) {
-                a.upgradeHash(Passwords.hash(password));
-            }
+            // Compare-and-set avoids overwriting a concurrent password reset/change.
+            s.createMutationQuery(
+                            "update Account a set a.passwordHash=:newHash where a.id=:id and a.passwordHash=:oldHash")
+                    .setParameter("newHash", upgraded)
+                    .setParameter("id", accountId)
+                    .setParameter("oldHash", originalHash)
+                    .executeUpdate();
             return null;
         });
     }

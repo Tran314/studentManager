@@ -23,7 +23,14 @@ public class StudentDaoHibernateImpl implements StudentDao {
     }
 
     @Override
-    public PageResult<Student> search(Session session, Integer sno, String name, int requestedPage, int pageSize, String sort, boolean descending) {
+    public PageResult<Student> search(
+            Session session,
+            Integer sno,
+            String name,
+            int requestedPage,
+            int pageSize,
+            String sort,
+            boolean descending) {
         String where = " where 1=1" + (sno == null ? "" : " and s.sno=:sno")
                 + (name.isEmpty() ? "" : " and s.sname like :name escape '!'");
         String orderBy = " order by " + sortColumn(sort) + (descending ? " desc" : " asc");
@@ -35,8 +42,14 @@ public class StudentDaoHibernateImpl implements StudentDao {
         long total = count.getSingleResult();
         int pages = (int) Math.max(1, (total + pageSize - 1) / pageSize);
         int page = Math.max(1, Math.min(requestedPage, pages));
-        return new PageResult<>(query.setFirstResult((page - 1) * pageSize).setMaxResults(pageSize)
-                .getResultList(), page, pageSize, total, pages);
+        return new PageResult<>(
+                query.setFirstResult((page - 1) * pageSize)
+                        .setMaxResults(pageSize)
+                        .getResultList(),
+                page,
+                pageSize,
+                total,
+                pages);
     }
 
     private String sortColumn(String sort) {

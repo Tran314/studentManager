@@ -38,11 +38,15 @@ public class AuditEntry {
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private Instant createdAt;
 
-    public AuditEntry() {
-    }
+    public AuditEntry() {}
 
-    public AuditEntry(String actorUsername, String actorRole, String action,
-            Integer targetSno, String targetUsername, String details) {
+    public AuditEntry(
+            String actorUsername,
+            String actorRole,
+            String action,
+            Integer targetSno,
+            String targetUsername,
+            String details) {
         this.actorUsername = actorUsername;
         this.actorRole = actorRole;
         this.action = action;

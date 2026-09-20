@@ -7,11 +7,14 @@ import java.nio.charset.StandardCharsets;
 /** Container health check using the bundled JDK; no curl dependency. */
 public final class HealthProbe {
     private HealthProbe() {}
+
     public static void main(String[] args) {
         HttpURLConnection connection = null;
         int status = 1;
         try {
-            connection = (HttpURLConnection) URI.create("http://127.0.0.1:8080/studentManagerSix/health").toURL().openConnection();
+            connection = (HttpURLConnection) URI.create("http://127.0.0.1:8080/studentManagerSix/health")
+                    .toURL()
+                    .openConnection();
             connection.setConnectTimeout(2000);
             connection.setReadTimeout(2000);
             connection.setInstanceFollowRedirects(false);
