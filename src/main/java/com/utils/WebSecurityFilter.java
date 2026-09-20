@@ -54,7 +54,7 @@ public class WebSecurityFilter implements Filter {
         HttpServletResponse response = (HttpServletResponse) outgoing;
         request.setCharacterEncoding("UTF-8");
         response.setCharacterEncoding("UTF-8");
-        setSecurityHeaders(response);
+        setSecurityHeaders(request, response);
 
         String path = request.getServletPath();
         if (path.startsWith("/assets/")) {
@@ -222,7 +222,7 @@ public class WebSecurityFilter implements Filter {
         return request.getRemoteAddr();
     }
 
-    private void setSecurityHeaders(HttpServletResponse response) {
+    private void setSecurityHeaders(HttpServletRequest request, HttpServletResponse response) {
         response.setHeader("X-Content-Type-Options", "nosniff");
         response.setHeader("X-Frame-Options", "DENY");
         response.setHeader("Referrer-Policy", "same-origin");
@@ -232,13 +232,13 @@ public class WebSecurityFilter implements Filter {
         // P4-5: only emit HSTS when running behind HTTPS. A long-lived HSTS
         // header on an HTTP-only deployment is a footgun because browsers
         // remember it and refuse the downgrade.
-        if (cookieSecure()) {
+        if (cookieSecure(request)) {
             response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
         }
     }
 
-    private boolean cookieSecure() {
-        Object value = incoming.getServletContext().getAttribute("cookieSecure");
+    private boolean cookieSecure(HttpServletRequest request) {
+        Object value = request.getServletContext().getAttribute("cookieSecure");
         return value instanceof Boolean && (Boolean) value;
     }
 
