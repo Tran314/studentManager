@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.util.List;
 
 /**
  * Integration tests against a real MySQL. Uses Testcontainers when no
@@ -29,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class StudentServiceIT {
 
     private static final String TEST_PASSWORD = "Student-test-2026";
+    private static final Identity TEST_ADMIN = new Identity(0L, "test-admin", "ADMIN", null, 0);
 
     private static MySQLContainer<?> mysql;
     private static SessionFactory factory;
@@ -69,16 +71,16 @@ class StudentServiceIT {
     void seedCreatesTenStudentsThenRegisterAddsOne() {
         service.seed("Admin-test-2026", TEST_PASSWORD);
         assertEquals(10, service.search(null, "", 1).totalRows());
-        service.register(11, "张三_<测试>%", TEST_PASSWORD, 21, "香港😀");
+        service.register(11, "张三_<测试>%", TEST_PASSWORD, 21, "香港😀", TEST_ADMIN);
         assertEquals("张三_<测试>%", service.find(11).getSname());
     }
 
     @Test
     @Order(2)
     void searchByNameAndPageBoundary() {
-        service.register(100, "alice", TEST_PASSWORD, 20, "addr-a");
-        service.register(101, "alex", TEST_PASSWORD, 21, "addr-b");
-        service.register(102, "bob", TEST_PASSWORD, 22, "addr-c");
+        service.register(100, "alice", TEST_PASSWORD, 20, "addr-a", TEST_ADMIN);
+        service.register(101, "alex", TEST_PASSWORD, 21, "addr-b", TEST_ADMIN);
+        service.register(102, "bob", TEST_PASSWORD, 22, "addr-c", TEST_ADMIN);
 
         assertEquals(2, service.search(null, "al", 1).totalRows());
         PageResult<Student> empty = service.search(null, "missing", 1);
@@ -92,8 +94,8 @@ class StudentServiceIT {
     @Test
     @Order(3)
     void wildcardCharactersAreTreatedLiterally() {
-        service.register(200, "foo_bar", TEST_PASSWORD, 20, "");
-        service.register(201, "50%off", TEST_PASSWORD, 20, "");
+        service.register(200, "foo_bar", TEST_PASSWORD, 20, "", TEST_ADMIN);
+        service.register(201, "50%off", TEST_PASSWORD, 20, "", TEST_ADMIN);
         // Underscore and percent in user input match literal characters, not SQL wildcards.
         assertEquals(1, service.search(null, "_", 1).totalRows());
         assertEquals(1, service.search(null, "%", 1).totalRows());
@@ -102,9 +104,9 @@ class StudentServiceIT {
     @Test
     @Order(4)
     void duplicateStudentIsRejected() {
-        service.register(300, "first", TEST_PASSWORD, 20, "");
+        service.register(300, "first", TEST_PASSWORD, 20, "", TEST_ADMIN);
         BusinessException duplicate = assertThrows(BusinessException.class,
-                () -> service.register(300, "second", TEST_PASSWORD, 20, ""));
+                () -> service.register(300, "second", TEST_PASSWORD, 20, "", TEST_ADMIN));
         assertEquals(409, duplicate.getStatus());
         assertEquals("first", service.find(300).getSname());
     }
@@ -112,7 +114,7 @@ class StudentServiceIT {
     @Test
     @Order(5)
     void passwordChangeInvalidatesOtherSessions() {
-        service.register(400, "charlie", TEST_PASSWORD, 20, "");
+        service.register(400, "charlie", TEST_PASSWORD, 20, "", TEST_ADMIN);
         Identity sessionA = service.login("400", TEST_PASSWORD);
         Identity sessionB = service.login("400", TEST_PASSWORD);
 
@@ -130,6 +132,21 @@ class StudentServiceIT {
 
     @Test
     @Order(6)
+    void adminPasswordResetKicksOutExistingSession() {
+        service.register(500, "diana", TEST_PASSWORD, 20, "", TEST_ADMIN);
+        Identity studentSession = service.login("500", TEST_PASSWORD);
+
+        service.resetPassword(TEST_ADMIN, 500, "Admin-rotated-2026");
+
+        // authVersion bumped, the cached Identity is no longer accepted.
+        assertNull(service.current(studentSession));
+        assertThrows(BusinessException.class, () -> service.login("500", TEST_PASSWORD));
+        Identity fresh = service.login("500", "Admin-rotated-2026");
+        assertNotNull(fresh);
+    }
+
+    @Test
+    @Order(7)
     void constraintFailureRollsBackBothWrites() {
         // Add a CHECK that rejects username='99' so the account insert fails
         // after the student insert. The whole tx must roll back.
@@ -141,7 +158,7 @@ class StudentServiceIT {
         }
         try {
             assertThrows(BusinessException.class,
-                    () -> service.register(99, "回滚", TEST_PASSWORD, 20, ""));
+                    () -> service.register(99, "回滚", TEST_PASSWORD, 20, "", TEST_ADMIN));
             // Rollback verified: student 99 was never committed.
             assertEquals(404, assertThrows(BusinessException.class, () -> service.find(99)).getStatus());
             assertTrue(service.healthy());
@@ -151,6 +168,23 @@ class StudentServiceIT {
                 s.createNativeMutationQuery("alter table account drop check test_reject_99").executeUpdate();
                 tx.commit();
             }
+        }
+    }
+
+    @Test
+    @Order(8)
+    void mutationsWriteAuditRows() {
+        // Register, update, delete - each must leave a row in audit_log.
+        service.register(600, "evan", TEST_PASSWORD, 20, "初始地址", TEST_ADMIN);
+        service.update(600, "evan-renamed", 21, "新地址", TEST_ADMIN);
+        service.delete(600, TEST_ADMIN);
+
+        try (Session s = factory.openSession()) {
+            @SuppressWarnings("unchecked")
+            List<String> actions = s.createNativeQuery(
+                    "select action from audit_log where target_sno=600 order by id")
+                    .getResultList();
+            assertEquals(List.of("CREATE", "UPDATE", "DELETE"), actions);
         }
     }
 }

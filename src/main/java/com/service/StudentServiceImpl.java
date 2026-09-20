@@ -26,18 +26,20 @@ public class StudentServiceImpl implements StudentService {
     private final SessionFactory factory;
     private final StudentDao students;
     private final AccountDao accounts;
+    private final AuditService audit;
     private final String dummyHash = Passwords.hash("Dummy-login-password-9483");
 
-    /** Production constructor; wires default Hibernate-backed DAOs. */
+    /** Production constructor; wires default Hibernate-backed DAOs and audit. */
     public StudentServiceImpl(SessionFactory factory) {
-        this(factory, new StudentDaoHibernateImpl(), new AccountDaoHibernateImpl());
+        this(factory, new StudentDaoHibernateImpl(), new AccountDaoHibernateImpl(), new AuditServiceImpl());
     }
 
-    /** Test constructor; accepts DAOs directly so unit tests can pass mocks. */
-    public StudentServiceImpl(SessionFactory factory, StudentDao students, AccountDao accounts) {
+    /** Test constructor; accepts DAOs and audit so unit tests can substitute mocks. */
+    public StudentServiceImpl(SessionFactory factory, StudentDao students, AccountDao accounts, AuditService audit) {
         this.factory = factory;
         this.students = students;
         this.accounts = accounts;
+        this.audit = audit;
     }
 
     /** Read-only transaction; uses setDefaultReadOnly so Hibernate can skip dirty-check overhead. */
@@ -100,7 +102,7 @@ public class StudentServiceImpl implements StudentService {
     }
 
     public PageResult<Student> search(Integer sno, String name, int page) {
-        String clean = Validation.text(name, "姓名", 20, false);
+        String clean = Validation.text(name, "姓名", Limits.NAME_MAX, false);
         return txRead(s -> students.search(s, sno, clean, page));
     }
 
@@ -116,7 +118,7 @@ public class StudentServiceImpl implements StudentService {
         return txRead(s -> required(s, sno));
     }
 
-    public void register(int sno, String name, String password, int age, String address) {
+    public void register(int sno, String name, String password, int age, String address, Identity actor) {
         validate(sno, name, age, address);
         String hash = Passwords.hash(password);
         tx(s -> {
@@ -126,14 +128,19 @@ public class StudentServiceImpl implements StudentService {
             Student student = new Student(sno, name.strip(), age, address == null ? "" : address.strip());
             students.add(s, student);
             s.persist(new Account(String.valueOf(sno), hash, "STUDENT", student));
+            audit.record(s, actor, AuditService.ACTION_CREATE, sno, String.valueOf(sno), null);
             return null;
         });
     }
 
-    public void update(int sno, String name, int age, String address) {
+    public void update(int sno, String name, int age, String address, Identity actor) {
         validate(sno, name, age, address);
         tx(s -> {
-            required(s, sno).update(name.strip(), age, address == null ? "" : address.strip());
+            Student before = required(s, sno);
+            String oldName = before.getSname();
+            before.update(name.strip(), age, address == null ? "" : address.strip());
+            audit.record(s, actor, AuditService.ACTION_UPDATE, sno, null,
+                    "from='" + oldName + "' to='" + before.getSname() + "'");
             return null;
         });
     }
@@ -149,17 +156,18 @@ public class StudentServiceImpl implements StudentService {
         }
     }
 
-    public void delete(int sno) {
+    public void delete(int sno, Identity actor) {
         tx(s -> {
             Student student = required(s, sno);
             accounts.deleteForStudent(s, sno);
             students.delete(s, student);
+            audit.record(s, actor, AuditService.ACTION_DELETE, sno, String.valueOf(sno), null);
             return null;
         });
     }
 
     public Identity login(String username, String password) {
-        String clean = Validation.text(username, "登录名", 64, true);
+        String clean = Validation.text(username, "登录名", Limits.USERNAME_MAX, true);
         return txRead(s -> {
             Account account = accounts.byUsername(s, clean);
             boolean valid = Passwords.verify(password, account == null ? dummyHash : account.getPasswordHash());
@@ -191,6 +199,29 @@ public class StudentServiceImpl implements StudentService {
                 throw new BusinessException(400, "当前密码不正确。");
             }
             account.changePassword(Passwords.hash(newPassword));
+            audit.record(s, identity, AuditService.ACTION_PASSWORD_CHANGE, null, identity.username(), null);
+            return null;
+        });
+    }
+
+    /**
+     * Admin-only: rotate a student's password without knowing the old one.
+     * Bumps authVersion so all of the student's other open sessions are
+     * kicked out on their next request.
+     */
+    public void resetPassword(Identity admin, int sno, String newPassword) {
+        if (admin == null || !admin.isAdmin()) {
+            throw new BusinessException(403, "仅管理员可以重置学生密码。");
+        }
+        Validation.password(newPassword);
+        tx(s -> {
+            Student student = required(s, sno);
+            Account account = accounts.byUsername(s, String.valueOf(sno));
+            if (account == null) {
+                throw new BusinessException(404, "学生账号不存在。");
+            }
+            account.changePassword(Passwords.hash(newPassword));
+            audit.record(s, admin, AuditService.ACTION_PASSWORD_RESET, sno, account.getUsername(), null);
             return null;
         });
     }

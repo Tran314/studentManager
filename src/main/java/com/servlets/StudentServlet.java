@@ -119,7 +119,7 @@ public class StudentServlet extends HttpServlet {
                 }
                 case "/students/create", "/students/edit", "/profile" -> handleStudentMutation(req, res, path(req));
                 case "/students/delete" -> {
-                    service().delete(snoParam(req));
+                    service().delete(snoParam(req), identity(req));
                     redirect(req, res, Route.STUDENTS.path, "学生及关联账号已删除。");
                 }
                 case "/password" -> handlePassword(req, res);
@@ -176,10 +176,11 @@ public class StudentServlet extends HttpServlet {
         String name = Validation.text(req.getParameter("sname"), "姓名", Limits.NAME_MAX, true);
         int age = Validation.positiveInt(req.getParameter("age"), "年龄", Limits.AGE_MAX);
         String address = Validation.text(req.getParameter("address"), "地址", Limits.ADDRESS_MAX, false);
+        Identity actor = identity(req);
         if (creating) {
-            service().register(number, name, req.getParameter("password"), age, address);
+            service().register(number, name, req.getParameter("password"), age, address, actor);
         } else {
-            service().update(number, name, age, address);
+            service().update(number, name, age, address, actor);
         }
         String target = "/profile".equals(route) ? Route.PROFILE.path : Route.STUDENTS.path;
         redirect(req, res, target, "学生资料已保存。");
