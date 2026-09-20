@@ -2,6 +2,7 @@ package com.dao;
 
 import com.pojo.PageResult;
 import com.pojo.Student;
+import com.utils.Limits;
 import org.hibernate.Session;
 import org.hibernate.query.Query;
 
@@ -31,10 +32,10 @@ public class StudentDaoHibernateImpl implements StudentDao {
         bind(count, sno, name);
         bind(query, sno, name);
         long total = count.getSingleResult();
-        int pages = (int) Math.max(1, (total + 9) / 10);
+        int pages = (int) Math.max(1, (total + Limits.PAGE_SIZE - 1) / Limits.PAGE_SIZE);
         int page = Math.max(1, Math.min(requestedPage, pages));
-        return new PageResult<>(query.setFirstResult((page - 1) * 10).setMaxResults(10).getResultList(),
-                page, 10, total, pages);
+        return new PageResult<>(query.setFirstResult((page - 1) * Limits.PAGE_SIZE).setMaxResults(Limits.PAGE_SIZE)
+                .getResultList(), page, Limits.PAGE_SIZE, total, pages);
     }
 
     private void bind(Query<?> query, Integer sno, String name) {

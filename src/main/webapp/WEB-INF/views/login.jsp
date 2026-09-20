@@ -4,8 +4,8 @@
 <div class="card auth-card"><div class="eyebrow">WELCOME BACK</div><h2>欢迎回来</h2><p class="muted">请输入账号信息，进入你的工作空间。</p>
 <form method="post" action="${pageContext.request.contextPath}/login">
 <input type="hidden" name="csrf" value="${sessionScope.csrf}">
-<label for="username">登录名 / 学号</label><input id="username" name="username" maxlength="64" autocomplete="username" required value="<c:out value='${param.username}'/>" placeholder="学生请输入学号">
-<label for="password">密码</label><input id="password" name="password" type="password" maxlength="128" autocomplete="current-password" required placeholder="请输入密码">
+<label for="username">登录名 / 学号</label><input id="username" name="username" maxlength="${limits.usernameMax}" autocomplete="username" required value="<c:out value='${param.username}'/>" placeholder="学生请输入学号">
+<label for="password">密码</label><input id="password" name="password" type="password" maxlength="${limits.passwordMax}" autocomplete="current-password" required placeholder="请输入密码">
 <button class="primary wide" type="submit">登录工作台 <span>→</span></button></form>
 <p class="auth-switch">还没有学生账号？请联系管理员创建。</p></div></section>
 <%@ include file="footer.jspf" %>

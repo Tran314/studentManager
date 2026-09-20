@@ -7,6 +7,7 @@ import com.pojo.Account;
 import com.pojo.Identity;
 import com.pojo.PageResult;
 import com.pojo.Student;
+import com.utils.Limits;
 import com.utils.Passwords;
 import com.utils.Validation;
 import java.util.function.Function;
@@ -132,10 +133,10 @@ public class StudentServiceImpl implements StudentService {
         if (sno <= 0) {
             throw new BusinessException(400, "学号必须为正整数。");
         }
-        Validation.text(name, "姓名", 20, true);
-        Validation.text(address, "地址", 50, false);
-        if (age < 1 || age > 150) {
-            throw new BusinessException(400, "年龄必须为1–150的整数。");
+        Validation.text(name, "姓名", Limits.NAME_MAX, true);
+        Validation.text(address, "地址", Limits.ADDRESS_MAX, false);
+        if (age < Limits.AGE_MIN || age > Limits.AGE_MAX) {
+            throw new BusinessException(400, "年龄必须为" + Limits.AGE_MIN + "–" + Limits.AGE_MAX + "的整数。");
         }
     }
 

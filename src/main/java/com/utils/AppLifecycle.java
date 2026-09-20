@@ -25,6 +25,9 @@ public class AppLifecycle implements ServletContextListener {
                 service.seed(HibernateSessionFactoryUtil.requiredEnv("DEMO_ADMIN_PASSWORD"),
                     HibernateSessionFactoryUtil.requiredEnv("DEMO_STUDENT_PASSWORD"));
             context.setAttribute("studentService", service);
+            // P2-4: expose input limits to JSP via applicationScope so server-side
+            // validation and HTML5 maxlength share one source of truth.
+            context.setAttribute("limits", Limits.get());
         } catch (RuntimeException e) {
             if (factory != null) factory.close();
             throw e;
