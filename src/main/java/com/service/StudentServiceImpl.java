@@ -176,19 +176,37 @@ public class StudentServiceImpl implements StudentService {
 
     public Identity login(String username, String password) {
         String clean = Validation.text(username, "登录名", Limits.USERNAME_MAX, true);
-        return txRead(s -> {
+        Object[] result = txRead(s -> {
             Account account = accounts.byUsername(s, clean);
             boolean valid = Passwords.verify(password, account == null ? dummyHash : account.getPasswordHash());
             if (!valid || account == null) {
                 throw new BusinessException(401, Messages.ERR_INVALID_CREDENTIAL);
             }
-            // P4-3: transparently rotate the hash to the current iteration count
-            // when the stored value is older. Does NOT bump authVersion, so
-            // existing sessions stay valid.
-            if (Passwords.needsRehash(account.getPasswordHash())) {
-                account.upgradeHash(Passwords.hash(password));
+            // Capture the stored hash alongside the identity so we can decide
+            // post-tx whether to upgrade. The txRead session is read-only and
+            // would silently drop a write inside this lambda.
+            return new Object[]{Identity.of(account), account.getPasswordHash(), account.getId()};
+        });
+        Identity identity = (Identity) result[0];
+        String storedHash = (String) result[1];
+        long accountId = (long) result[2];
+        // P4-3: transparently rotate a hash that uses fewer iterations than the
+        // current setting. Old 600k hashes are accepted as-is (they are
+        // stronger, not weaker). authVersion is NOT bumped, so other sessions
+        // for the same user remain valid.
+        if (Passwords.needsRehash(storedHash)) {
+            upgradeHashInNewTx(accountId, password);
+        }
+        return identity;
+    }
+
+    private void upgradeHashInNewTx(long accountId, String password) {
+        tx(s -> {
+            Account a = accounts.byId(s, accountId);
+            if (a != null && Passwords.needsRehash(a.getPasswordHash())) {
+                a.upgradeHash(Passwords.hash(password));
             }
-            return Identity.of(account);
+            return null;
         });
     }
 
