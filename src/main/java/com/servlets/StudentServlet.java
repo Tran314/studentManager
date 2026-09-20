@@ -3,6 +3,7 @@ package com.servlets;
 import com.pojo.Identity;
 import com.service.BusinessException;
 import com.service.StudentService;
+import com.utils.Limits;
 import com.utils.Validation;
 import com.utils.WebSecurityFilter;
 import jakarta.servlet.ServletException;
@@ -31,7 +32,7 @@ public class StudentServlet extends HttpServlet {
     }
 
     private int snoParam(HttpServletRequest req) {
-        return Validation.positiveInt(req.getParameter("sno"), "学号", Integer.MAX_VALUE);
+        return Validation.positiveInt(req.getParameter("sno"), "学号", Limits.SNO_MAX);
     }
 
     private void view(HttpServletRequest req, HttpServletResponse res, String page, String title)
@@ -47,49 +48,63 @@ public class StudentServlet extends HttpServlet {
         res.sendRedirect(req.getContextPath() + route);
     }
 
+    private void renderRoute(HttpServletRequest req, HttpServletResponse res, Route route) throws ServletException, IOException {
+        view(req, res, route.view, route.title);
+    }
+
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
-        switch (path(req)) {
-            case "", "/" -> redirect(req, res,
-                    identity(req) == null ? "/login" : identity(req).isAdmin() ? "/students" : "/profile",
-                    null);
-            case "/login" -> view(req, res, "login", "欢迎回来");
-            case "/students/create" -> {
-                req.setAttribute("creating", true);
-                view(req, res, "student-form", "新增学生");
+        String path = path(req);
+
+        if (path.isEmpty() || "/".equals(path)) {
+            Route home = Route.HOME;
+            redirect(req, res, home.homeRedirect(req), null);
+            return;
+        }
+
+        if ("/health".equals(path)) {
+            res.setContentType("text/plain;charset=UTF-8");
+            try {
+                res.setStatus(service().healthy() ? 200 : 503);
+                res.getWriter().print("OK");
+            } catch (RuntimeException e) {
+                res.setStatus(503);
+                res.getWriter().print("UNAVAILABLE");
             }
-            case "/students" -> {
+            return;
+        }
+
+        Route route = Route.of(path);
+        if (route == null || route.view == null) {
+            res.setStatus(405);
+            res.setHeader("Allow", "POST");
+            view(req, res, "error", "请通过表单提交");
+            return;
+        }
+
+        switch (route) {
+            case STUDENTS -> {
                 String snoText = req.getParameter("sno");
                 Integer number = snoText == null || snoText.isBlank() ? null : snoParam(req);
-                String name = Validation.text(req.getParameter("name"), "姓名", 20, false);
-                req.setAttribute("result", service().search(number, name, Validation.page(req.getParameter("page"))));
-                view(req, res, "students", "学生管理");
+                String name = Validation.text(req.getParameter("name"), "姓名", Limits.NAME_MAX, false);
+                req.setAttribute("result",
+                        service().search(number, name, Validation.page(req.getParameter("page"))));
+                renderRoute(req, res, route);
             }
-            case "/students/detail" -> {
+            case STUDENT_DETAIL -> {
                 req.setAttribute("student", service().find(snoParam(req)));
-                view(req, res, "detail", "学生详情");
+                renderRoute(req, res, route);
             }
-            case "/students/edit", "/profile" -> {
-                int number = "/profile".equals(path(req)) ? identity(req).studentSno() : snoParam(req);
+            case STUDENT_CREATE -> {
+                req.setAttribute("creating", true);
+                renderRoute(req, res, route);
+            }
+            case STUDENT_EDIT, PROFILE -> {
+                int number = route == Route.PROFILE ? identity(req).studentSno() : snoParam(req);
                 req.setAttribute("student", service().find(number));
-                view(req, res, "student-form", "/profile".equals(path(req)) ? "个人中心" : "编辑学生");
+                renderRoute(req, res, route);
             }
-            case "/password" -> view(req, res, "password", "修改密码");
-            case "/health" -> {
-                res.setContentType("text/plain;charset=UTF-8");
-                try {
-                    res.setStatus(service().healthy() ? 200 : 503);
-                    res.getWriter().print("OK");
-                } catch (RuntimeException e) {
-                    res.setStatus(503);
-                    res.getWriter().print("UNAVAILABLE");
-                }
-            }
-            default -> {
-                res.setStatus(405);
-                res.setHeader("Allow", "POST");
-                view(req, res, "error", "请通过表单提交");
-            }
+            default -> renderRoute(req, res, route);
         }
     }
 
@@ -97,61 +112,17 @@ public class StudentServlet extends HttpServlet {
     protected void doPost(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         try {
             switch (path(req)) {
-                case "/login" -> {
-                    Identity identity;
-                    try {
-                        identity = service().login(req.getParameter("username"), req.getParameter("password"));
-                    } catch (BusinessException e) {
-                        req.setAttribute("rateLimitResult", "failure");
-                        throw e;
-                    }
-                    req.changeSessionId();
-                    req.getSession().setAttribute("identity", identity);
-                    req.getSession().setAttribute("csrf", WebSecurityFilter.newToken());
-                    req.setAttribute("rateLimitResult", "success");
-                    redirect(req, res, identity.isAdmin() ? "/students" : "/profile", "登录成功，欢迎回来。");
-                }
+                case "/login" -> handleLogin(req, res);
                 case "/logout" -> {
                     req.getSession().invalidate();
-                    redirect(req, res, "/login", "已安全退出。");
+                    redirect(req, res, Route.LOGIN.path, "已安全退出。");
                 }
-                case "/students/create", "/students/edit", "/profile" -> {
-                    String route = path(req);
-                    boolean creating = "/students/create".equals(route);
-                    int number = "/profile".equals(route) ? identity(req).studentSno() : snoParam(req);
-                    String name = Validation.text(req.getParameter("sname"), "姓名", 20, true);
-                    int age = Validation.positiveInt(req.getParameter("age"), "年龄", 150);
-                    String address = Validation.text(req.getParameter("address"), "地址", 50, false);
-                    if (creating) {
-                        service().register(number, name, req.getParameter("password"), age, address);
-                    } else {
-                        service().update(number, name, age, address);
-                    }
-                    redirect(req, res,
-                            "/profile".equals(route) ? "/profile" : "/students",
-                            "学生资料已保存。");
-                }
+                case "/students/create", "/students/edit", "/profile" -> handleStudentMutation(req, res, path(req));
                 case "/students/delete" -> {
                     service().delete(snoParam(req));
-                    redirect(req, res, "/students", "学生及关联账号已删除。");
+                    redirect(req, res, Route.STUDENTS.path, "学生及关联账号已删除。");
                 }
-                case "/password" -> {
-                    try {
-                        if (req.getParameter("newPassword") == null
-                                || !req.getParameter("newPassword").equals(req.getParameter("confirmPassword"))) {
-                            throw new BusinessException(400, "两次输入的新密码不一致。");
-                        }
-                        service().changePassword(identity(req),
-                                req.getParameter("oldPassword"),
-                                req.getParameter("newPassword"));
-                    } catch (BusinessException e) {
-                        req.setAttribute("rateLimitResult", "failure");
-                        throw e;
-                    }
-                    req.setAttribute("rateLimitResult", "success");
-                    req.getSession().invalidate();
-                    redirect(req, res, "/login", "密码已修改，请重新登录。");
-                }
+                case "/password" -> handlePassword(req, res);
                 default -> {
                     res.setStatus(405);
                     res.setHeader("Allow", "GET");
@@ -165,12 +136,16 @@ public class StudentServlet extends HttpServlet {
             res.setStatus(e.getStatus());
             req.setAttribute("error", e.getMessage());
             req.setAttribute("submitted", true);
-            switch (path(req)) {
-                case "/login" -> view(req, res, "login", "欢迎回来");
-                case "/password" -> view(req, res, "password", "修改密码");
-                case "/students/create", "/students/edit", "/profile" -> {
-                    req.setAttribute("creating", "/students/create".equals(path(req)));
-                    if ("/profile".equals(path(req))) {
+            Route route = Route.of(path(req));
+            if (route == null) {
+                throw e;
+            }
+            switch (route) {
+                case LOGIN -> view(req, res, Route.LOGIN.view, Route.LOGIN.title);
+                case PASSWORD -> view(req, res, Route.PASSWORD.view, Route.PASSWORD.title);
+                case STUDENT_CREATE, STUDENT_EDIT, PROFILE -> {
+                    req.setAttribute("creating", route.isCreating());
+                    if (route == Route.PROFILE) {
                         req.setAttribute("student", service().find(identity(req).studentSno()));
                     }
                     view(req, res, "student-form", "请检查学生资料");
@@ -178,5 +153,53 @@ public class StudentServlet extends HttpServlet {
                 default -> throw e;
             }
         }
+    }
+
+    private void handleLogin(HttpServletRequest req, HttpServletResponse res) throws IOException {
+        Identity identity;
+        try {
+            identity = service().login(req.getParameter("username"), req.getParameter("password"));
+        } catch (BusinessException e) {
+            req.setAttribute("rateLimitResult", "failure");
+            throw e;
+        }
+        req.changeSessionId();
+        req.getSession().setAttribute("identity", identity);
+        req.getSession().setAttribute("csrf", WebSecurityFilter.newToken());
+        req.setAttribute("rateLimitResult", "success");
+        redirect(req, res, identity.isAdmin() ? Route.STUDENTS.path : Route.PROFILE.path, "登录成功，欢迎回来。");
+    }
+
+    private void handleStudentMutation(HttpServletRequest req, HttpServletResponse res, String route) throws IOException {
+        boolean creating = "/students/create".equals(route);
+        int number = "/profile".equals(route) ? identity(req).studentSno() : snoParam(req);
+        String name = Validation.text(req.getParameter("sname"), "姓名", Limits.NAME_MAX, true);
+        int age = Validation.positiveInt(req.getParameter("age"), "年龄", Limits.AGE_MAX);
+        String address = Validation.text(req.getParameter("address"), "地址", Limits.ADDRESS_MAX, false);
+        if (creating) {
+            service().register(number, name, req.getParameter("password"), age, address);
+        } else {
+            service().update(number, name, age, address);
+        }
+        String target = "/profile".equals(route) ? Route.PROFILE.path : Route.STUDENTS.path;
+        redirect(req, res, target, "学生资料已保存。");
+    }
+
+    private void handlePassword(HttpServletRequest req, HttpServletResponse res) throws IOException {
+        try {
+            if (req.getParameter("newPassword") == null
+                    || !req.getParameter("newPassword").equals(req.getParameter("confirmPassword"))) {
+                throw new BusinessException(400, "两次输入的新密码不一致。");
+            }
+            service().changePassword(identity(req),
+                    req.getParameter("oldPassword"),
+                    req.getParameter("newPassword"));
+        } catch (BusinessException e) {
+            req.setAttribute("rateLimitResult", "failure");
+            throw e;
+        }
+        req.setAttribute("rateLimitResult", "success");
+        req.getSession().invalidate();
+        redirect(req, res, Route.LOGIN.path, "密码已修改，请重新登录。");
     }
 }
