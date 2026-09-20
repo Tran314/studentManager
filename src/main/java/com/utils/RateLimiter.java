@@ -43,7 +43,7 @@ public final class RateLimiter {
         Bucket bucket = buckets.get(key);
         if (bucket == null) {
             if (buckets.size() >= capacity) {
-                throw new BusinessException(429, Messages.ERR_RATE_LIMIT);
+                evictIdlest(now);
             }
             bucket = new Bucket();
             buckets.put(key, bucket);
@@ -81,6 +81,36 @@ public final class RateLimiter {
         if (bucket != null) {
             bucket.failures.clear();
         }
+    }
+
+    /**
+     * At capacity, drop the least-recently-touched bucket instead of refusing the
+     * new key. Refusing would turn a distributed flood of unknown usernames into a
+     * denial of service for everyone else, since the flood's own buckets would keep
+     * the map full until they aged out.
+     *
+     * <p>Buckets still serving a lockout are never evicted: discarding one would
+     * hand an attacker a way to clear their own lockout by filling the map. When
+     * every bucket is locked the map is genuinely saturated and the request is
+     * refused.
+     */
+    private void evictIdlest(long now) {
+        String idlest = null;
+        long idlestTouched = Long.MAX_VALUE;
+        for (Map.Entry<String, Bucket> entry : buckets.entrySet()) {
+            Bucket candidate = entry.getValue();
+            if (now < candidate.lockedUntil) {
+                continue;
+            }
+            if (candidate.touched < idlestTouched) {
+                idlestTouched = candidate.touched;
+                idlest = entry.getKey();
+            }
+        }
+        if (idlest == null) {
+            throw new BusinessException(429, Messages.ERR_RATE_LIMIT);
+        }
+        buckets.remove(idlest);
     }
 
     private static void prune(ArrayDeque<Long> entries, long cutoff) {
