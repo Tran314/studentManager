@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.util.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 @WebFilter(urlPatterns = "/*", dispatcherTypes = {DispatcherType.REQUEST, DispatcherType.ERROR})
 public class WebSecurityFilter implements Filter {
@@ -31,8 +32,17 @@ public class WebSecurityFilter implements Filter {
     /** Within this window, an authenticated request reuses the cached Identity instead of a DB hit. */
     private static final long IDENTITY_CACHE_TTL_MILLIS = 30_000L;
 
+    private static final String MDC_REQUEST_ID = "requestId";
+    private static final String MDC_USER = "user";
+
     public static String newToken() {
         byte[] token = new byte[32];
+        RANDOM.nextBytes(token);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(token);
+    }
+
+    private static String newRequestId() {
+        byte[] token = new byte[8];
         RANDOM.nextBytes(token);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(token);
     }
@@ -69,11 +79,15 @@ public class WebSecurityFilter implements Filter {
 
         // P0-5: ERROR dispatch from web.xml error-page. Skip session/auth/CSRF/rate-limit to avoid recursion.
         boolean isErrorDispatch = request.getAttribute("jakarta.servlet.error.request_uri") != null;
-        if (isErrorDispatch) {
-            request.setAttribute("identity", loadIdentityQuietly(request));
-            chain.doFilter(request, response);
-            return;
-        }
+
+        String requestId = newRequestId();
+        MDC.put(MDC_REQUEST_ID, requestId);
+        try {
+            if (isErrorDispatch) {
+                request.setAttribute("identity", loadIdentityQuietly(request));
+                chain.doFilter(request, response);
+                return;
+            }
 
         try {
             // P0-4: lazy session creation. Anonymous GETs no longer leak 30-minute sessions on every scan.
@@ -116,6 +130,9 @@ public class WebSecurityFilter implements Filter {
                 session.setAttribute("csrf", newToken());
             }
             request.setAttribute("identity", identity);
+            if (identity != null) {
+                MDC.put(MDC_USER, identity.username());
+            }
 
             boolean publicPath = "/login".equals(path) || path.isEmpty() || "/".equals(path);
             if (!publicPath && identity == null) {
@@ -171,6 +188,10 @@ public class WebSecurityFilter implements Filter {
         } catch (Exception e) {
             LOG.error("Request failed ({})", e.getClass().getSimpleName());
             renderError(request, response, 500, "暂时无法完成操作，请稍后重试。");
+        }
+        } finally {
+            MDC.remove(MDC_USER);
+            MDC.remove(MDC_REQUEST_ID);
         }
     }
 
