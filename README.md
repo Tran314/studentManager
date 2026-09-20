@@ -37,7 +37,7 @@ docker compose down                 # 移除本项目容器及网络，保留数
 ## 功能与权限
 
 - 管理员：新增学生（同时创建登录账号）、学生详情、编辑资料、删除学生及其账号、按学号精确搜索、按姓名关键词搜索、每页10条分页。
-- 学生：公开注册、学号登录、查看与编辑本人姓名/年龄/地址、修改密码。
+- 学生：学号登录、查看与编辑本人姓名/年龄/地址、修改密码。
 - 双方：修改密码、退出登录。管理员账号不属于学生档案，不能从学生删除入口删除。
 - 学号为1–2147483647的整数，创建后不可修改；姓名1–20字、年龄1–150、地址不超过50字，密码8–128个字符。
 - 无匹配数据时展示空状态；负页码调整为1，超过末页时回到末页，非整数页码返回400。
@@ -56,6 +56,7 @@ docker compose down                 # 移除本项目容器及网络，保留数
 | Hibernate ORM / Persistence | 7.4.7.Final / 3.2 |
 | MySQL / Connector/J | 9.7.1 / 9.7.0 |
 | JUnit Jupiter | 6.1.3 |
+| 静态分析 | Spotless 2.46.1、SpotBugs 4.9.6 + findsecbugs 1.13、OWASP dependency-check 12.1.1、JaCoCo 0.8.13、maven-enforcer 3.6.1 |
 
 ~~~text
 src/main/java/com/
@@ -135,6 +136,18 @@ python scripts/smoke_test.py --restart
 脚本从 .env 读取管理员密码，创建并清理自己的临时学生记录，覆盖完整HTTP流程、CSRF、越权、HTML转义、Cookie、登录退出和改密。--restart 额外依次重启本项目数据库和应用并确认记录/密码保留，因此执行期间网页会短暂中断。报告输出到 target/http-acceptance.json。
 
 实际验收结果见 [docs/acceptance.md](docs/acceptance.md)。
+
+## 持续集成
+
+GitHub Actions 在 `.github/workflows/ci.yml` 定义了三个串行 Job：
+
+1. **build-and-static**：JDK 25 + `mvn -B verify -DskipITs`，跑 Surefire 单测、Spotless 格式检查、SpotBugs（High 级别零容忍 + findsecbugs 安全规则）、OWASP dependency-check（CVSS ≥7 阻断）、JaCoCo 报告。
+2. **integration**：`docker compose -f compose.test.yaml up --abort-on-container-exit --exit-code-from tests`，在临时 MySQL 上跑 `*IT.java`（`@EnabledIfEnvironmentVariable("TEST_DB_URL")`）。
+3. **acceptance**：`docker compose up -d --build`，等待 `/health`，跑 `python scripts/smoke_test.py --restart`（85 项 HTTP 断言），报告写入 `target/http-acceptance.json`。
+
+本地首次启用 Spotless 之前需要运行一次 `mvn spotless:apply` 一次性格式化存量代码，之后 `mvn spotless:check` 在 CI 与本地都会拒绝新增未格式化代码。
+
+`.github/dependabot.yml` 配置了 Maven 与 GitHub Actions 周更；Tomcat/Hibernate 主版本升级由人工评估（已在 `ignore` 中标记）。CI 报告（Surefire/Failsafe/JaCoCo/SpotBugs/dependency-check/http-acceptance）均作为构件保留 14–30 天。
 
 ## 数据初始化与原工程
 

@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    target-branch: main
+    labels:
+      - "dependencies"
+      - "maven"
+    ignore:
+      # Major bumps for framework deps are evaluated manually.
+      - dependency-name: "org.hibernate.orm:*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jakarta.servlet:*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    target-branch: main
+    labels:
+      - "dependencies"
+      - "ci"

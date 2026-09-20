@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-static:
+    name: Build, format, static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: mvn verify (skip ITs)
+        # Spotless + SpotBugs + dependency-check + JaCoCo + Surefire all run here.
+        # Failsafe is skipped; integration tests live in their own job against a real MySQL.
+        run: mvn -B verify -DskipITs
+
+      - name: Upload Surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports
+          retention-days: 14
+
+      - name: Upload JaCoCo coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco
+          retention-days: 14
+
+      - name: Upload SpotBugs report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotbugs-report
+          path: target/spotbugs.html
+          retention-days: 14
+
+      - name: Upload dependency-check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: |
+            target/dependency-check-report.html
+            target/dependency-check-report.json
+          retention-days: 14
+
+  integration:
+    name: Integration tests (real MySQL)
+    runs-on: ubuntu-latest
+    needs: build-and-static
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Run integration tests via compose.test.yaml
+        # Uses the bundled compose.test.yaml: tmpfs MySQL seeded from docker/init,
+        # then `mvn -B verify` inside the tests container. --abort-on-container-exit
+        # makes the run fail fast when Surefire/Failsafe fails.
+        run: docker compose -f compose.test.yaml up --abort-on-container-exit --exit-code-from tests
+
+      - name: Upload Failsafe reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failsafe-reports
+          path: target/failsafe-reports
+          retention-days: 14
+
+  acceptance:
+    name: HTTP acceptance (live app)
+    runs-on: ubuntu-latest
+    needs: integration
+    env:
+      DB_PASSWORD: ci-Db-pass-2026
+      DB_ROOT_PASSWORD: ci-Db-root-2026
+      DEMO_ADMIN_PASSWORD: ci-Admin-pass-2026
+      DEMO_STUDENT_PASSWORD: ci-Student-pass-2026
+      APP_PORT: '8080'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Build WAR (skip tests)
+        run: mvn -B package -DskipTests
+
+      - name: Start application stack
+        run: docker compose up -d --build
+
+      - name: Wait for /health
+        # Tomcat needs ~30-60s to start; the in-container healthcheck starts at 90s.
+        # We probe the public URL directly to avoid races.
+        run: |
+          for i in {1..90}; do
+            if curl -sf http://127.0.0.1:8080/studentManagerSix/health; then
+              echo "App ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "App failed to start in 180s"; exit 1
+
+      - name: Run smoke tests
+        run: python scripts/smoke_test.py --restart
+
+      - name: Upload acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: http-acceptance
+          path: target/http-acceptance.json
+          retention-days: 30
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v || true
