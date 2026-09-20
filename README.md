@@ -57,6 +57,10 @@ docker compose down                 # 移除本项目容器及网络，保留数
 | MySQL / Connector/J | 9.7.1 / 9.7.0 |
 | JUnit Jupiter | 6.1.3 |
 | 静态分析 | Spotless 2.46.1、SpotBugs 4.9.6 + findsecbugs 1.13、OWASP dependency-check 12.1.1、JaCoCo 0.8.13、maven-enforcer 3.6.1 |
+| Tomcat Connector | `compression="on"`，minSize 1024，gzip `text/html, css, javascript, json, plain, xml` |
+| 静态资源缓存 | `Cache-Control: public, max-age=31536000, immutable`，文件名含 8 字符 SHA-256 前缀 |
+| 身份缓存 | Session 内 `identity` + `identityCheckedAt`，30s 内跳过 `account` 校验 |
+| 索引 | `student(sname)` B-tree（普通关键字走 `kw%` 前缀匹配，含 `%`/`_` 仍走字面子串） |
 
 ~~~text
 src/main/java/com/
@@ -91,7 +95,7 @@ Docker 构建无需在本机安装 JDK。若要在 IDEA 运行和调试：
 
 生成 target/studentManagerSix.war；将其部署到 Tomcat 11.0.25 的 webapps 目录。Unix/macOS 可使用 ./mvnw clean package。
 
-本机 MySQL 9.7.1 应先新建独立数据库和应用账户，选择该数据库后执行 docker/init/001-schema.sql；不要对旧 studentManager 数据库直接执行新脚本。Tomcat 启动环境配置：
+本机 MySQL 9.7.1 应先新建独立数据库和应用账户，选择该数据库后执行 docker/init/001-schema.sql；不要对旧 studentManager 数据库直接执行新脚本。新数据库还会自动应用 docker/init/002-index.sql（学生姓名索引）；**已有数据卷请手动执行 `docker/init/002-index.sql`**，因为 MySQL 的 `/docker-entrypoint-initdb.d` 仅在首次初始化时运行。Tomcat 启动环境配置：
 
 ~~~text
 DB_URL=jdbc:mysql://localhost:3306/student_manager?connectionTimeZone=UTC

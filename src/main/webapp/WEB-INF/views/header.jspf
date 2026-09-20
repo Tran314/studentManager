@@ -3,9 +3,9 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title><c:out value="${title}"/> · 学生管理 SIX</title>
-<link rel="icon" type="image/svg+xml" href="${pageContext.request.contextPath}/assets/favicon.svg">
-<link rel="stylesheet" href="${pageContext.request.contextPath}/assets/app.css">
-<script src="${pageContext.request.contextPath}/assets/app.js" defer></script></head>
+<link rel="icon" type="image/svg+xml" href="${pageContext.request.contextPath}/assets/favicon.c5af8644.svg">
+<link rel="stylesheet" href="${pageContext.request.contextPath}/assets/app.f18f8a0f.css">
+<script src="${pageContext.request.contextPath}/assets/app.fdcf6db5.js" defer></script></head>
 <body>
 <header class="topbar"><a class="brand" href="${pageContext.request.contextPath}/"><span class="brand-mark">S</span><span>学生管理 <small>SIX</small></span></a>
 <div class="top-right"><span class="status-dot"></span><span>校园信息工作台</span></div><c:if test="${not empty identity}"><form class="mobile-logout" action="${pageContext.request.contextPath}/logout" method="post"><input type="hidden" name="csrf" value="${sessionScope.csrf}"><button class="quiet" type="submit">退出登录</button></form></c:if></header>

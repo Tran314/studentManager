@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Custom server.xml overlaid on tomcat:11.0.25-jdk25-temurin. Mirrors the upstream
+  default plus P1-5: gzip compression on the HTTP Connector for HTML, CSS,
+  JavaScript, JSON, plain text and XML. Threshold of 1024 bytes avoids wasting
+  CPU on tiny error pages and 304 responses.
+-->
+<Server port="8005" shutdown="SHUTDOWN">
+  <Listener className="org.apache.catalina.startup.VersionLoggerListener" />
+  <Listener className="org.apache.catalina.core.AprLifecycleListener" />
+  <Listener className="org.apache.catalina.core.JreMemoryLeakPreventionListener" />
+  <Listener className="org.apache.catalina.mbeans.GlobalResourcesLifecycleListener" />
+  <Listener className="org.apache.catalina.core.ThreadLocalLeakPreventionListener" />
+  <Service name="Catalina">
+    <Connector port="8080" protocol="HTTP/1.1"
+               connectionTimeout="20000"
+               redirectPort="8443"
+               compression="on"
+               compressionMinSize="1024"
+               compressibleMimeType="text/html,text/css,application/javascript,application/json,text/plain,text/xml" />
+    <Engine name="Catalina" defaultHost="localhost">
+      <Realm className="org.apache.catalina.realm.LockOutRealm">
+        <Realm className="org.apache.catalina.realm.UserDatabaseRealm"
+               resourceName="UserDatabase" />
+      </Realm>
+      <Host name="localhost" appBase="webapps"
+            unpackWARs="true" autoDeploy="false">
+        <Valve className="org.apache.catalina.valves.AccessLogValve" directory="logs"
+               prefix="localhost_access_log" suffix=".txt"
+               pattern="%h %l %u %t &quot;%r&quot; %s %b %D ms" />
+      </Host>
+    </Engine>
+  </Service>
+</Server>

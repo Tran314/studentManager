@@ -28,6 +28,9 @@ public class WebSecurityFilter implements Filter {
     private static final Logger LOG = LoggerFactory.getLogger(WebSecurityFilter.class);
     private static final SecureRandom RANDOM = new SecureRandom();
 
+    /** Within this window, an authenticated request reuses the cached Identity instead of a DB hit. */
+    private static final long IDENTITY_CACHE_TTL_MILLIS = 30_000L;
+
     public static String newToken() {
         byte[] token = new byte[32];
         RANDOM.nextBytes(token);
@@ -45,6 +48,9 @@ public class WebSecurityFilter implements Filter {
 
         String path = request.getServletPath();
         if (path.startsWith("/assets/")) {
+            // P1-4: fingerprinted assets (app.<hash>.css, app.<hash>.js) are content-stable
+            // and safe to cache for a year. Browsers never revalidate within max-age=31536000.
+            response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
             chain.doFilter(request, response);
             return;
         }
@@ -82,7 +88,28 @@ public class WebSecurityFilter implements Filter {
 
             StudentService service = (StudentService) request.getServletContext().getAttribute("studentService");
             Identity previous = session == null ? null : (Identity) session.getAttribute("identity");
-            Identity identity = service.current(previous);
+            Long checkedAt = session == null ? null : (Long) session.getAttribute("identityCheckedAt");
+
+            // P1-1: skip the auth_version DB roundtrip when the cached Identity is still fresh.
+            // Stale window <= IDENTITY_CACHE_TTL_MILLIS (30s) for password-change / account-deletion kickout.
+            long now = System.currentTimeMillis();
+            boolean cacheFresh = previous != null
+                    && checkedAt != null
+                    && (now - checkedAt) < IDENTITY_CACHE_TTL_MILLIS;
+            Identity identity;
+            if (cacheFresh) {
+                identity = previous;
+            } else {
+                identity = service.current(previous);
+                if (session != null) {
+                    if (identity != null) {
+                        session.setAttribute("identity", identity);
+                        session.setAttribute("identityCheckedAt", now);
+                    } else {
+                        session.removeAttribute("identityCheckedAt");
+                    }
+                }
+            }
             if (previous != null && identity == null && session != null) {
                 session.invalidate();
                 session = request.getSession(true);
