@@ -73,7 +73,7 @@ public class WebSecurityFilter implements Filter {
 
         // P0-1: public registration is permanently closed; students are created by admins only.
         if ("/register".equals(path)) {
-            renderError(request, response, 410, "公开注册已关闭。学生账号由管理员创建，请联系管理员。");
+            renderError(request, response, 410, Messages.ERR_PUBLIC_REGISTRATION_CLOSED);
             return;
         }
 
@@ -140,10 +140,10 @@ public class WebSecurityFilter implements Filter {
                 return;
             }
             if (path.startsWith("/students") && identity != null && !identity.isAdmin()) {
-                throw new BusinessException(403, "仅管理员可以访问学生管理功能。");
+                throw new BusinessException(403, Messages.ERR_ADMIN_ONLY_STUDENTS);
             }
             if ("/profile".equals(path) && identity != null && identity.isAdmin()) {
-                throw new BusinessException(403, "管理员请通过学生管理查看档案。");
+                throw new BusinessException(403, Messages.ERR_ADMIN_USE_DIRECTORY);
             }
 
             // P0-2: rate-limit POST /login and POST /password before any PBKDF2 work.
@@ -162,7 +162,7 @@ public class WebSecurityFilter implements Filter {
                 if (actual == null || !MessageDigest.isEqual(
                         expected.getBytes(StandardCharsets.UTF_8),
                         actual.getBytes(StandardCharsets.UTF_8))) {
-                    throw new BusinessException(403, "表单已过期，请刷新页面后重试。");
+                    throw new BusinessException(403, Messages.ERR_CSRF);
                 }
             }
 
@@ -187,7 +187,7 @@ public class WebSecurityFilter implements Filter {
             renderError(request, response, e.getStatus(), e.getMessage());
         } catch (Exception e) {
             LOG.error("Request failed ({})", e.getClass().getSimpleName());
-            renderError(request, response, 500, "暂时无法完成操作，请稍后重试。");
+            renderError(request, response, 500, Messages.ERR_INTERNAL);
         }
         } finally {
             MDC.remove(MDC_USER);

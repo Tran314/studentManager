@@ -4,6 +4,7 @@ import com.pojo.Identity;
 import com.service.BusinessException;
 import com.service.StudentService;
 import com.utils.Limits;
+import com.utils.Messages;
 import com.utils.Validation;
 import com.utils.WebSecurityFilter;
 import jakarta.servlet.ServletException;
@@ -120,12 +121,12 @@ public class StudentServlet extends HttpServlet {
                 case "/login" -> handleLogin(req, res);
                 case "/logout" -> {
                     req.getSession().invalidate();
-                    redirect(req, res, Route.LOGIN.path, "已安全退出。");
+                    redirect(req, res, Route.LOGIN.path, Messages.TITLE_LOGOUT);
                 }
                 case "/students/create", "/students/edit", "/profile" -> handleStudentMutation(req, res, path(req));
                 case "/students/delete" -> {
                     service().delete(snoParam(req), identity(req));
-                    redirect(req, res, Route.STUDENTS.path, "学生及关联账号已删除。");
+                    redirect(req, res, Route.STUDENTS.path, Messages.TITLE_STUDENT_DELETED);
                 }
                 case "/students/reset" -> handleResetPassword(req, res);
                 case "/password" -> handlePassword(req, res);
@@ -174,7 +175,7 @@ public class StudentServlet extends HttpServlet {
         req.getSession().setAttribute("identity", identity);
         req.getSession().setAttribute("csrf", WebSecurityFilter.newToken());
         req.setAttribute("rateLimitResult", "success");
-        redirect(req, res, identity.isAdmin() ? Route.STUDENTS.path : Route.PROFILE.path, "登录成功，欢迎回来。");
+        redirect(req, res, identity.isAdmin() ? Route.STUDENTS.path : Route.PROFILE.path, Messages.TITLE_LOGIN_SUCCESS);
     }
 
     private void handleStudentMutation(HttpServletRequest req, HttpServletResponse res, String route) throws IOException {
@@ -190,14 +191,14 @@ public class StudentServlet extends HttpServlet {
             service().update(number, name, age, address, actor);
         }
         String target = "/profile".equals(route) ? Route.PROFILE.path : Route.STUDENTS.path;
-        redirect(req, res, target, "学生资料已保存。");
+        redirect(req, res, target, Messages.TITLE_STUDENT_SAVED);
     }
 
     private void handlePassword(HttpServletRequest req, HttpServletResponse res) throws IOException {
         try {
             if (req.getParameter("newPassword") == null
                     || !req.getParameter("newPassword").equals(req.getParameter("confirmPassword"))) {
-                throw new BusinessException(400, "两次输入的新密码不一致。");
+                throw new BusinessException(400, Messages.ERR_PASSWORD_MISMATCH);
             }
             service().changePassword(identity(req),
                     req.getParameter("oldPassword"),
@@ -208,7 +209,7 @@ public class StudentServlet extends HttpServlet {
         }
         req.setAttribute("rateLimitResult", "success");
         req.getSession().invalidate();
-        redirect(req, res, Route.LOGIN.path, "密码已修改，请重新登录。");
+        redirect(req, res, Route.LOGIN.path, Messages.TITLE_PASSWORD_CHANGED);
     }
 
     private void handleResetPassword(HttpServletRequest req, HttpServletResponse res) throws IOException {
@@ -216,7 +217,7 @@ public class StudentServlet extends HttpServlet {
             String newPassword = req.getParameter("newPassword");
             String confirm = req.getParameter("confirmPassword");
             if (newPassword == null || !newPassword.equals(confirm)) {
-                throw new BusinessException(400, "两次输入的新密码不一致。");
+                throw new BusinessException(400, Messages.ERR_PASSWORD_MISMATCH);
             }
             service().resetPassword(identity(req), snoParam(req), newPassword);
         } catch (BusinessException e) {
@@ -224,6 +225,6 @@ public class StudentServlet extends HttpServlet {
             throw e;
         }
         req.setAttribute("rateLimitResult", "success");
-        redirect(req, res, Route.STUDENTS.path, "学生密码已重置，该学生的其他会话已失效。");
+        redirect(req, res, Route.STUDENTS.path, Messages.TITLE_PASSWORD_RESET);
     }
 }

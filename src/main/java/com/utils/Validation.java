@@ -45,8 +45,7 @@ public final class Validation {
         if (password == null
                 || password.length() < Limits.PASSWORD_MIN
                 || password.length() > Limits.PASSWORD_MAX) {
-            throw new BusinessException(400,
-                    "密码长度必须为" + Limits.PASSWORD_MIN + "–" + Limits.PASSWORD_MAX + "个字符。");
+            throw new BusinessException(400, Messages.ERR_PASSWORD_LENGTH);
         }
     }
 }

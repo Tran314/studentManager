@@ -9,6 +9,7 @@ import com.pojo.Identity;
 import com.pojo.PageResult;
 import com.pojo.Student;
 import com.utils.Limits;
+import com.utils.Messages;
 import com.utils.Passwords;
 import com.utils.Validation;
 import java.util.function.Function;
@@ -80,10 +81,10 @@ public class StudentServiceImpl implements StudentService {
         } catch (ConstraintViolationException e) {
             String name = e.getConstraintName() == null ? "" : e.getConstraintName().toLowerCase();
             if (name.contains("username") || name.contains("student_sno") || name.contains("primary")) {
-                throw new BusinessException(409, "学号或登录名已存在，请使用其他学号。");
+                throw new BusinessException(409, Messages.ERR_DUPLICATE_LOGIN);
             }
             LOG.warn("Database constraint rejected an operation: {}", name);
-            throw new BusinessException(400, "提交的数据不符合约束要求。");
+            throw new BusinessException(400, Messages.ERR_CONSTRAINT);
         } catch (RuntimeException e) {
             // Do not log SQL bind values, entities or credentials.
             LOG.error("Database operation failed ({})", e.getClass().getSimpleName());
@@ -109,7 +110,7 @@ public class StudentServiceImpl implements StudentService {
     private Student required(Session s, int sno) {
         Student student = students.find(s, sno);
         if (student == null) {
-            throw new BusinessException(404, "学生记录不存在。");
+            throw new BusinessException(404, Messages.ERR_STUDENT_NOT_FOUND);
         }
         return student;
     }
@@ -123,7 +124,7 @@ public class StudentServiceImpl implements StudentService {
         String hash = Passwords.hash(password);
         tx(s -> {
             if (students.find(s, sno) != null || accounts.byUsername(s, String.valueOf(sno)) != null) {
-                throw new BusinessException(409, "学号已存在，请使用其他学号。");
+                throw new BusinessException(409, Messages.ERR_DUPLICATE_SNO);
             }
             Student student = new Student(sno, name.strip(), age, address == null ? "" : address.strip());
             students.add(s, student);
@@ -147,12 +148,12 @@ public class StudentServiceImpl implements StudentService {
 
     private void validate(int sno, String name, int age, String address) {
         if (sno <= 0) {
-            throw new BusinessException(400, "学号必须为正整数。");
+            throw new BusinessException(400, Messages.ERR_INVALID_SNO);
         }
         Validation.text(name, "姓名", Limits.NAME_MAX, true);
         Validation.text(address, "地址", Limits.ADDRESS_MAX, false);
         if (age < Limits.AGE_MIN || age > Limits.AGE_MAX) {
-            throw new BusinessException(400, "年龄必须为" + Limits.AGE_MIN + "–" + Limits.AGE_MAX + "的整数。");
+            throw new BusinessException(400, Messages.ERR_AGE_RANGE);
         }
     }
 
@@ -172,7 +173,7 @@ public class StudentServiceImpl implements StudentService {
             Account account = accounts.byUsername(s, clean);
             boolean valid = Passwords.verify(password, account == null ? dummyHash : account.getPasswordHash());
             if (!valid || account == null) {
-                throw new BusinessException(401, "登录名或密码不正确。");
+                throw new BusinessException(401, Messages.ERR_INVALID_CREDENTIAL);
             }
             return Identity.of(account);
         });
@@ -193,10 +194,10 @@ public class StudentServiceImpl implements StudentService {
         tx(s -> {
             Account account = accounts.byId(s, identity.id());
             if (account == null || account.getAuthVersion() != identity.authVersion()) {
-                throw new BusinessException(401, "登录已过期，请重新登录。");
+                throw new BusinessException(401, Messages.ERR_SESSION_EXPIRED);
             }
             if (!Passwords.verify(oldPassword, account.getPasswordHash())) {
-                throw new BusinessException(400, "当前密码不正确。");
+                throw new BusinessException(400, Messages.ERR_OLD_PASSWORD);
             }
             account.changePassword(Passwords.hash(newPassword));
             audit.record(s, identity, AuditService.ACTION_PASSWORD_CHANGE, null, identity.username(), null);
@@ -211,14 +212,14 @@ public class StudentServiceImpl implements StudentService {
      */
     public void resetPassword(Identity admin, int sno, String newPassword) {
         if (admin == null || !admin.isAdmin()) {
-            throw new BusinessException(403, "仅管理员可以重置学生密码。");
+            throw new BusinessException(403, Messages.ERR_ADMIN_ONLY_RESET);
         }
         Validation.password(newPassword);
         tx(s -> {
             Student student = required(s, sno);
             Account account = accounts.byUsername(s, String.valueOf(sno));
             if (account == null) {
-                throw new BusinessException(404, "学生账号不存在。");
+                throw new BusinessException(404, Messages.ERR_STUDENT_ACCOUNT_NOT_FOUND);
             }
             account.changePassword(Passwords.hash(newPassword));
             audit.record(s, admin, AuditService.ACTION_PASSWORD_RESET, sno, account.getUsername(), null);
