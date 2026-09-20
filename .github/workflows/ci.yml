@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 25 (Temurin)
         uses: actions/setup-java@v4
@@ -64,7 +64,7 @@ jobs:
     needs: build-and-static
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 25 (Temurin)
         uses: actions/setup-java@v4
@@ -103,7 +103,7 @@ jobs:
       APP_PORT: '8080'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 25 (Temurin)
         uses: actions/setup-java@v4
