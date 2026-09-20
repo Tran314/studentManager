@@ -15,7 +15,7 @@
         <hibernate.version>7.4.7.Final</hibernate.version>
         <junit.version>6.1.3</junit.version>
         <spotless.version>2.46.1</spotless.version>
-        <spotbugs.version>4.9.6.0</spotbugs.version>
+        <spotbugs.version>4.10.4.1</spotbugs.version>
         <findsecbugs.version>1.13.0</findsecbugs.version>
         <dependency-check.version>12.1.1</dependency-check.version>
         <jacoco.version>0.8.15</jacoco.version>
