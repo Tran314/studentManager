@@ -6,6 +6,8 @@ from pathlib import Path
 from urllib.request import Request, build_opener, HTTPCookieProcessor, HTTPRedirectHandler
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
+import csv
+import io
 from http.cookiejar import CookieJar
 from html.parser import HTMLParser
 import argparse
@@ -90,6 +92,8 @@ def main():
     if not ADMIN_PASSWORD:
         raise RuntimeError("Set DEMO_ADMIN_PASSWORD or create .env before running.")
     public = Client()
+    require(public.request("/register")[0] == 410, "Public registration is closed")
+    require(public.request("/register", {"sno": "999"})[0] == 410, "POST registration is closed")
     status, headers, body = public.request("/health")
     require(status == 200 and body == "OK", "Database-backed health")
     status, headers, body = public.request("/students")
@@ -142,10 +146,34 @@ def main():
         require(admin.request("/students/detail?sno=" + str(sno))[0] == 200, "Detail page renders")
         require(admin.submit("/students/edit?sno=" + str(sno), {"sno": str(sno), "sname": "管理员更新", "age": "22", "address": "九龙"})[0] == 302, "Admin edits student")
 
+        # CSV exports precisely the selected page and preserves Chinese text.
+        query = urlencode({"size": "10", "page": "2", "sort": "sno", "dir": "asc"})
+        status, headers, export = admin.request("/students/export?" + query)
+        require(status == 200 and export.startswith("\ufeff学号"), "CSV UTF-8 BOM and header")
+        exported = list(csv.reader(io.StringIO(export.lstrip("\ufeff"))))
+        require(any(row[0] == str(sno) for row in exported[1:]), "CSV uses requested page")
+        require(len(exported) <= 11, "CSV respects selected page size")
+        status, _, listing = admin.request("/students?size=10&sort=name&dir=desc")
+        require("size=10" in listing and "sort=name" in listing and "dir=desc" in listing, "Pagination retains size and ordering")
+
+        # An invalid reset must retain the target ID and allow a corrected submission.
+        reset_client = Client()
+        reset_client.login(str(other_sno), password)
+        require(reset_client.request("/profile")[0] == 200, "Prewarm student before admin reset")
+        reset_path = "/students/reset?sno=" + str(other_sno)
+        reset_password = "Reset-only-" + secrets.token_hex(10)
+        status, _, error_form = admin.submit(reset_path, {"sno": str(other_sno), "newPassword": reset_password, "confirmPassword": "mismatch"})
+        require(status == 400 and Inputs(error_form).values.get("sno") == str(other_sno), "Reset error preserves student ID")
+        require(admin.submit(reset_path, {"sno": str(other_sno), "newPassword": reset_password, "confirmPassword": reset_password})[0] == 302, "Admin resets password")
+        require(reset_client.request("/profile")[0] == 302, "Admin reset immediately revokes prewarmed session")
+        require(reset_client.submit("/login", {"username": str(other_sno), "password": password})[0] == 401, "Reset rejects old password")
+        reset_client.login(str(other_sno), reset_password)
+
         student = Client()
         student.login(str(sno), password)
         second = Client()
         second.login(str(sno), password)
+        require(second.request("/profile")[0] == 200, "Prewarm second session before revocation")
         require(student.request("/students")[0] == 403, "Student cannot list all records")
         require(student.request("/students/detail?sno=" + str(other_sno))[0] == 403, "Student cannot read another record")
         require(student.submit("/students/delete", {"sno": str(other_sno)}, form="/profile")[0] == 403, "Student cannot delete a record")
@@ -206,6 +234,13 @@ def main():
                 result = cleanup.submit("/students/delete", {"sno": str(number)}, form="/students")
                 if result[0] != 302:
                     raise AssertionError("Could not clean up smoke-test record")
+    # Unique account keeps the rate-limit test independent of application accounts.
+    limited = Client()
+    unknown = "limit-" + secrets.token_hex(8)
+    for _ in range(5):
+        require(limited.submit("/login", {"username": unknown, "password": "not-a-real-password"})[0] == 401, "Rate limit allows initial failed attempt")
+    status, headers, _ = limited.submit("/login", {"username": unknown.upper(), "password": "not-a-real-password"})
+    require(status == 429 and headers.get("Retry-After"), "Rate limit rejects sixth attempt including case variants")
     report = {"passed": len(checks), "restart_checked": args.restart, "checks": checks}
     (ROOT / "target").mkdir(exist_ok=True)
     (ROOT / "target" / "http-acceptance.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
