@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
-Test set: com.utils.RateLimiterTest
+Test set: com.service.StudentServiceIT
 -------------------------------------------------------------------------------
-Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.031 s -- in com.utils.RateLimiterTest
+Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 16.64 s -- in com.service.StudentServiceIT
