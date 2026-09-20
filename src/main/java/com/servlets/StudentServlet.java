@@ -77,7 +77,19 @@ public class StudentServlet extends HttpServlet {
         }
 
         Route route = Route.of(path);
-        if (route == null || route.view == null) {
+        if (route == null) {
+            res.setStatus(405);
+            res.setHeader("Allow", "POST");
+            view(req, res, "error", "请通过表单提交");
+            return;
+        }
+        if (route == Route.STUDENTS_EXPORT) {
+            // Route.STUDENTS_EXPORT has view=null on purpose - it writes the
+            // response body directly. Skip the view==null 405 short-circuit.
+            writeCsv(req, res);
+            return;
+        }
+        if (route.view == null) {
             res.setStatus(405);
             res.setHeader("Allow", "POST");
             view(req, res, "error", "请通过表单提交");
@@ -89,7 +101,6 @@ public class StudentServlet extends HttpServlet {
                 req.setAttribute("result", searchStudents(req));
                 renderRoute(req, res, route);
             }
-            case STUDENTS_EXPORT -> writeCsv(req, res);
             case STUDENT_DETAIL -> {
                 req.setAttribute("student", service().find(snoParam(req)));
                 renderRoute(req, res, route);
@@ -254,6 +265,8 @@ public class StudentServlet extends HttpServlet {
         com.pojo.PageResult<com.pojo.Student> result = searchStudents(req);
         res.setContentType("text/csv; charset=UTF-8");
         res.setHeader("Content-Disposition", "attachment; filename=\"students.csv\"");
+        // BOM lets Excel for Windows detect UTF-8 instead of mis-decoding to GBK.
+        res.getWriter().write("\uFEFF");
         res.getWriter().write("学号,姓名,年龄,地址\r\n");
         for (com.pojo.Student s : result.items()) {
             res.getWriter().write(s.getSno() + "," + csv(s.getSname()) + "," + s.getAge() + "," + csv(s.getAddress()) + "\r\n");
@@ -263,6 +276,14 @@ public class StudentServlet extends HttpServlet {
     private static String csv(String value) {
         if (value == null) {
             return "";
+        }
+        // Mitigate CSV formula injection: leading '=', '+', '-', '@', TAB or CR
+        // would let Excel execute the cell as a formula on open.
+        if (!value.isEmpty()) {
+            char first = value.charAt(0);
+            if (first == '=' || first == '+' || first == '-' || first == '@' || first == '\t' || first == '\r') {
+                value = "'" + value;
+            }
         }
         // RFC 4180 quoting: wrap in quotes when the field contains a separator,
         // a quote, or a newline; double any embedded quote.
