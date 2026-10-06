@@ -183,7 +183,10 @@ public class StudentServiceImpl implements StudentService {
     }
 
     public Identity login(String username, String password) {
-        String clean = Validation.text(username, "登录名", Limits.USERNAME_MAX, true);
+        String clean = Validation.canonicalUsername(username);
+        if (clean == null) {
+            throw new BusinessException(401, Messages.ERR_INVALID_CREDENTIAL);
+        }
         Object[] result = txRead(s -> {
             Account account = accounts.byUsername(s, clean);
             boolean valid = Passwords.verify(password, account == null ? dummyHash : account.getPasswordHash());
@@ -236,7 +239,8 @@ public class StudentServiceImpl implements StudentService {
         Passwords.assertNotEqualToLogin(newPassword, identity.username());
         Passwords.assertSafe(newPassword);
         tx(s -> {
-            Account account = accounts.byId(s, identity.id());
+            // Lock before validating credentials so concurrent resets cannot be overwritten.
+            Account account = accounts.byIdForUpdate(s, identity.id());
             if (account == null || account.getAuthVersion() != identity.authVersion()) {
                 throw new BusinessException(401, Messages.ERR_SESSION_EXPIRED);
             }
@@ -262,7 +266,8 @@ public class StudentServiceImpl implements StudentService {
         Passwords.assertSafe(newPassword);
         tx(s -> {
             Student student = required(s, sno);
-            Account account = accounts.byUsername(s, String.valueOf(sno));
+            // A locking read sees the latest committed version, even after waiting for another reset.
+            Account account = accounts.byUsernameForUpdate(s, String.valueOf(sno));
             if (account == null) {
                 throw new BusinessException(404, Messages.ERR_STUDENT_ACCOUNT_NOT_FOUND);
             }

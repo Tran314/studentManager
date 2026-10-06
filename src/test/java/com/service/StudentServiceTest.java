@@ -138,7 +138,7 @@ class StudentServiceTest {
         Account a = account();
         Identity identity = Identity.of(a);
         status(401, () -> service.changePassword(identity, PASSWORD, "Another-secret-2026"));
-        when(accounts.byId(session, 2)).thenReturn(a);
+        when(accounts.byIdForUpdate(session, 2)).thenReturn(a);
         status(400, () -> service.changePassword(identity, "bad", "Another-secret-2026"));
         service.changePassword(identity, PASSWORD, "Another-secret-2026");
         assertEquals(1, a.getAuthVersion());
@@ -154,10 +154,29 @@ class StudentServiceTest {
         status(404, () -> service.resetPassword(admin, 42, PASSWORD));
         when(students.find(session, 42)).thenReturn(student);
         status(404, () -> service.resetPassword(admin, 42, PASSWORD));
-        when(accounts.byUsername(session, "42")).thenReturn(a);
+        when(accounts.byUsernameForUpdate(session, "42")).thenReturn(a);
         service.resetPassword(admin, 42, "Reset-secret-2026");
         assertEquals(1, a.getAuthVersion());
         verify(audit).record(session, admin, AuditService.ACTION_PASSWORD_RESET, 42, "42", null);
+    }
+
+    @Test
+    void invalidLoginNamesCannotReachDatabaseLookup() {
+        for (String username : new String[] {
+            null,
+            "",
+            " ",
+            "ad\u200bmin",
+            "ad\u00admin",
+            "admiñ",
+            "ＡＤＭＩＮ",
+            "admin\u0000",
+            "a".repeat(65),
+            "a".repeat(129)
+        }) {
+            status(401, () -> service.login(username, PASSWORD));
+        }
+        verify(accounts, never()).byUsername(any(), any());
     }
 
     @Test

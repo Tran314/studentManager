@@ -108,7 +108,7 @@ def main():
     require(public.submit("/login", {"username": "admin", "password": "wrong-password"})[0] == 401, "Incorrect password rejected")
 
     admin = Client()
-    admin.login("admin", ADMIN_PASSWORD)
+    admin.login(" AdMiN ", ADMIN_PASSWORD)
     status, _, body = admin.request("/students")
     require(status == 200 and "学生档案" in body, "Admin directory renders")
     require("pbkdf2" not in body and ADMIN_PASSWORD not in body, "No credentials in page")
@@ -134,6 +134,10 @@ def main():
         status, _, body = admin.submit("/students/create", data)
         require(status == 302, "Admin creates a student")
         created.append(sno)
+        alias_client = Client()
+        for alias in [str(sno)[:2] + "\u200b" + str(sno)[2:], str(sno) + "\u00ad", str(sno).translate(str.maketrans("0123456789", "０１２３４５６７８９"))]:
+            require(alias_client.submit("/login", {"username": alias, "password": password})[0] == 401,
+                    "Unicode login alias cannot authenticate or bypass account limits")
         require(admin.submit("/students/create", data)[0] == 409, "Duplicate student rejected")
         invalid = {**data, "sno": str(other_sno), "age": "151"}
         require(admin.submit("/students/create", invalid)[0] == 400, "Invalid age rejected")

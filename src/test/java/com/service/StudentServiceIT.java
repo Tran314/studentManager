@@ -1,22 +1,38 @@
 package com.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.dao.AccountDaoHibernateImpl;
+import com.dao.StudentDaoHibernateImpl;
+import com.pojo.Account;
 import com.pojo.Identity;
 import com.pojo.PageResult;
 import com.pojo.Student;
 import com.utils.HibernateSessionFactoryUtil;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.containers.MySQLContainer;
 
 /**
@@ -161,6 +177,44 @@ class StudentServiceIT {
         assertEquals(1, invalid.page());
     }
 
+    @ParameterizedTest
+    @CsvSource({"age,false", "age,true", "name,false", "name,true"})
+    void tiedSortValuesNeverDuplicateOrOmitStudentsAcrossPages(String sort, boolean descending) {
+        List<Integer> expected = new ArrayList<>();
+        try (Session s = factory.openSession()) {
+            var tx = s.beginTransaction();
+            for (int i = 0; i < 40; i++) {
+                int sno = 1000 + i;
+                s.persist(new Student(sno, "同名", 30, ""));
+                expected.add(sno);
+            }
+            tx.commit();
+        }
+        if (descending) {
+            Collections.reverse(expected);
+        }
+        List<Integer> actual = new ArrayList<>();
+        for (int page = 1; page <= 4; page++) {
+            PageResult<Student> result = service.search(null, "同名", page, 10, sort, descending);
+            assertEquals(40, result.totalRows());
+            assertEquals(4, result.totalPages());
+            assertEquals(10, result.items().size());
+            result.items().forEach(student -> actual.add(student.getSno()));
+        }
+        assertEquals(expected, actual);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"11\u200b00", "11\u00ad00", "１１００", "1100\u0000", "1100\ufe0f"})
+    void unicodeCollationAliasesCannotAuthenticate(String alias) {
+        service.register(1100, "alias-target", TEST_PASSWORD, 20, "", TEST_ADMIN);
+        assertNotNull(service.login(" 1100 ", TEST_PASSWORD));
+        assertEquals(
+                401,
+                assertThrows(BusinessException.class, () -> service.login(alias, TEST_PASSWORD))
+                        .getStatus());
+    }
+
     @Test
     void duplicateStudentIsRejected() {
         service.register(300, "first", TEST_PASSWORD, 20, "", TEST_ADMIN);
@@ -200,6 +254,114 @@ class StudentServiceIT {
         assertThrows(BusinessException.class, () -> service.login("500", TEST_PASSWORD));
         Identity fresh = service.login("500", "Admin-rotated-2026");
         assertNotNull(fresh);
+    }
+
+    @Test
+    void concurrentPasswordResetsRevokeSessionsBetweenBothCommits() throws Exception {
+        service.register(1200, "race-target", TEST_PASSWORD, 20, "", TEST_ADMIN);
+        PasswordRaceDao accounts = new PasswordRaceDao();
+        StudentServiceImpl racing =
+                new StudentServiceImpl(factory, new StudentDaoHibernateImpl(), accounts, new AuditServiceImpl());
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            try {
+                var first = executor.submit(() -> racing.resetPassword(TEST_ADMIN, 1200, "First-reset-2026"));
+                await(accounts.firstLocked);
+                var second = executor.submit(() -> racing.resetPassword(TEST_ADMIN, 1200, "Second-reset-2026"));
+                await(accounts.secondStarted);
+                assertFalse(accounts.secondLocked.await(250, TimeUnit.MILLISECONDS));
+                accounts.releaseFirst.countDown();
+                first.get(15, TimeUnit.SECONDS);
+                await(accounts.secondLocked);
+                Identity between = service.login("1200", "First-reset-2026");
+                assertEquals(1, between.authVersion());
+                accounts.releaseSecond.countDown();
+                second.get(15, TimeUnit.SECONDS);
+                assertEquals(2, service.login("1200", "Second-reset-2026").authVersion());
+                assertNull(service.current(between));
+            } finally {
+                accounts.releaseFirst.countDown();
+                accounts.releaseSecond.countDown();
+            }
+        }
+    }
+
+    @Test
+    void passwordChangeWaitingBehindResetRejectsStaleCredentials() throws Exception {
+        service.register(1201, "race-target", TEST_PASSWORD, 20, "", TEST_ADMIN);
+        Identity previous = service.login("1201", TEST_PASSWORD);
+        PasswordRaceDao accounts = new PasswordRaceDao();
+        StudentServiceImpl racing =
+                new StudentServiceImpl(factory, new StudentDaoHibernateImpl(), accounts, new AuditServiceImpl());
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            try {
+                var reset = executor.submit(() -> racing.resetPassword(TEST_ADMIN, 1201, "Admin-reset-2026"));
+                await(accounts.firstLocked);
+                var change = executor.submit(() -> racing.changePassword(previous, TEST_PASSWORD, "Stale-change-2026"));
+                await(accounts.secondStarted);
+                assertFalse(accounts.secondLocked.await(250, TimeUnit.MILLISECONDS));
+                accounts.releaseFirst.countDown();
+                reset.get(15, TimeUnit.SECONDS);
+                await(accounts.secondLocked);
+                accounts.releaseSecond.countDown();
+                ExecutionException error =
+                        assertThrows(ExecutionException.class, () -> change.get(15, TimeUnit.SECONDS));
+                assertEquals(
+                        401,
+                        assertInstanceOf(BusinessException.class, error.getCause())
+                                .getStatus());
+                assertEquals(1, service.login("1201", "Admin-reset-2026").authVersion());
+                assertNull(service.current(previous));
+                assertThrows(BusinessException.class, () -> service.login("1201", "Stale-change-2026"));
+            } finally {
+                accounts.releaseFirst.countDown();
+                accounts.releaseSecond.countDown();
+            }
+        }
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            assertTrue(latch.await(15, TimeUnit.SECONDS), "Concurrent password operation timed out");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** Pauses real locking reads to exercise two transactions in a controlled order. */
+    private static final class PasswordRaceDao extends AccountDaoHibernateImpl {
+        private final AtomicInteger writes = new AtomicInteger();
+        private final CountDownLatch firstLocked = new CountDownLatch(1);
+        private final CountDownLatch secondStarted = new CountDownLatch(1);
+        private final CountDownLatch secondLocked = new CountDownLatch(1);
+        private final CountDownLatch releaseFirst = new CountDownLatch(1);
+        private final CountDownLatch releaseSecond = new CountDownLatch(1);
+
+        @Override
+        public Account byUsernameForUpdate(Session session, String username) {
+            return locked(() -> super.byUsernameForUpdate(session, username));
+        }
+
+        @Override
+        public Account byIdForUpdate(Session session, long id) {
+            return locked(() -> super.byIdForUpdate(session, id));
+        }
+
+        private Account locked(Supplier<Account> query) {
+            int order = writes.incrementAndGet();
+            if (order == 2) {
+                secondStarted.countDown();
+            }
+            Account account = query.get();
+            if (order == 1) {
+                firstLocked.countDown();
+                await(releaseFirst);
+            } else if (order == 2) {
+                secondLocked.countDown();
+                await(releaseSecond);
+            }
+            return account;
+        }
     }
 
     @Test

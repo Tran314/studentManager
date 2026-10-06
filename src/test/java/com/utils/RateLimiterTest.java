@@ -11,7 +11,7 @@ class RateLimiterTest {
     void accountBudgetSurvivesIpAndCaseChanges() {
         RateLimiter limiter = new RateLimiter();
         for (int i = 0; i < 5; i++) {
-            limiter.check("ip" + i, " ＡdMÍn ", "/login");
+            limiter.check("ip" + i, " AdMiN ", "/login");
         }
         assertEquals(
                 429,

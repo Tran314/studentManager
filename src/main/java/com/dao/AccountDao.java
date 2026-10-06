@@ -13,5 +13,9 @@ public interface AccountDao {
 
     Account byId(Session session, long id);
 
+    Account byUsernameForUpdate(Session session, String username);
+
+    Account byIdForUpdate(Session session, long id);
+
     void deleteForStudent(Session session, int sno);
 }
