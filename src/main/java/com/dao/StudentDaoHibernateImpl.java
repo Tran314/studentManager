@@ -33,7 +33,9 @@ public class StudentDaoHibernateImpl implements StudentDao {
             boolean descending) {
         String where = " where 1=1" + (sno == null ? "" : " and s.sno=:sno")
                 + (name.isEmpty() ? "" : " and s.sname like :name escape '!'");
-        String orderBy = " order by " + sortColumn(sort) + (descending ? " desc" : " asc");
+        String column = sortColumn(sort);
+        String direction = descending ? " desc" : " asc";
+        String orderBy = " order by " + column + direction + ("s.sno".equals(column) ? "" : ", s.sno" + direction);
 
         Query<Long> count = session.createQuery("select count(s) from Student s" + where, Long.class);
         Query<Student> query = session.createQuery("from Student s" + where + orderBy, Student.class);

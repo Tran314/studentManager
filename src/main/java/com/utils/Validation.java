@@ -1,10 +1,23 @@
 package com.utils;
 
 import com.service.BusinessException;
+import java.util.Locale;
 
 public final class Validation {
 
     private Validation() {}
+
+    /** Shared login/limiter policy: reject Unicode input that can alias an ASCII account in MySQL. */
+    public static String canonicalUsername(String value) {
+        if (value == null || value.length() > Limits.USERNAME_MAX * 2) {
+            return null;
+        }
+        String clean = value.strip();
+        if (clean.length() > Limits.USERNAME_MAX || !clean.matches("[A-Za-z0-9._-]+")) {
+            return null;
+        }
+        return clean.toLowerCase(Locale.ROOT);
+    }
 
     public static String text(String value, String label, int max, boolean required) {
         String clean = value == null ? "" : value.strip();

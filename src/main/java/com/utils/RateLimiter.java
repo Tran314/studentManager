@@ -1,10 +1,8 @@
 package com.utils;
 
 import com.service.BusinessException;
-import java.text.Normalizer;
 import java.util.ArrayDeque;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.function.LongSupplier;
 
@@ -120,12 +118,8 @@ public final class RateLimiter {
     }
 
     static String canonicalUsername(String value) {
-        if (value == null || value.length() > Limits.USERNAME_MAX * 2) {
-            return "<invalid>";
-        }
-        return Normalizer.normalize(value.strip(), Normalizer.Form.NFKD)
-                .replaceAll("\\p{M}", "")
-                .toLowerCase(Locale.ROOT);
+        String canonical = Validation.canonicalUsername(value);
+        return canonical == null ? "<invalid>" : canonical;
     }
 
     synchronized int size() {
