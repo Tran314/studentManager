@@ -51,9 +51,15 @@
   - 风险收益：spotless 3.10 修复了多个 stability bug，建议合并但需配合一次 PR 风格的格式化提交
 
 **自动测试**
-- 本窗口未运行 `mvn verify` / `docker compose up`。
-- 合并项均为版本号 bump + plugin 升级，预期零行为变化；待 `mvn verify` 在 6 个新依赖版本上重跑。
-- PR #9 的"40 + 22 + 124"基线在没有源码修改的情况下仍可作为参考。
+- ✅ CI 已重跑：commit `d61332e` 上 `Build, format, static analysis` + `Integration tests (real MySQL)` + `HTTP acceptance (live app)` 三个 job 全部 `success`。
+- 这是 PR #9 合并之后、5 个 dependabot 升级之后的第一个绿色 CI。
+
+**`StudentDaoIT`（P1 草稿）**
+- 提交了两次（`12cc08e` 用错 API、`644c953` 修正 API 表面但未过 spotless），均被 CI 拒。
+- 第二次失败根因：项目使用 `palantir-java-format 2.71.0` 作为 spotless 引擎，规则非常严格（method chain 换行、lambda 格式、import 顺序等都跟 Google Java Format 不同）。我手写后未跑 `mvn spotless:apply`。
+- 草稿（318 行，覆盖 LIKE 转义、tie-breaker、page clamp、CRUD round-trip）保留在 `/data/studentManager-audit/StudentDaoIT.java`，并以 `docs/acceptance-2026-10-13.md` 中的"已知未做项"持续记录。
+- 回滚后 main = `d61332e`，CI 全绿。
+- 后续添加需要：本地 `mvn spotless:apply` 后再 commit + push，或者在 PR 中让 CI 失败时直接用 `mvn spotless:apply` 修复并 push amend。
 
 **已知未做项（保持原状）**
 - 未运行最新依赖下的 `mvn verify`。
@@ -66,7 +72,9 @@
 **结论**
 - 本窗口是"项目治理清扫"，不是"功能验收"。
 - 在 #3 #4 手动合上 + #8 评估决定之前，本仓库的 main 仍处于"包含部分未合并升级"的状态。
+- 但**当前 main 已是绿色 CI**（`d61332e`）：Build + 集成测试 + HTTP 验收全过。意味着 5 个 dependabot 升级的组合在 PR #9 之上没有引入回归。
 - 下一次"完整 HTTP 验收"应在 #3 #4 #8 全部合并后做，统计行覆盖 / 集成测试用例数 / 静态分析告警数与 PR #9 基线的差分。
+- 截至 2026-10-13 23:58 main 状态：`a2abfa9` (LICENSE) + `4c92c2a` (5 dependabot squash merges) + `09dd7bc` (acceptance doc) + `d61332e` (revert StudentDaoIT, build green).
 
 ---
 
