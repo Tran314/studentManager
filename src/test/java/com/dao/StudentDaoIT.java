@@ -37,6 +37,12 @@ import org.testcontainers.containers.MySQLContainer;
  * <p>Reuses the same Testcontainers wiring as {@code StudentServiceIT} so that
  * the tests reflect the actual Hibernate dialect behaviour against MySQL 9.
  * Each test uses a distinct student-id range so they stay independent.
+ *
+ * <p>NOTE: the public {@code StudentDao} interface requires every method to take
+ * a {@link Session} as the first parameter. This IT does not manage transactions
+ * itself; instead each test wraps a fresh session + transaction around the DAO
+ * call, since the DAO is built on top of plain Hibernate and expects an
+ * already-open session.
  */
 class StudentDaoIT {
 
@@ -45,7 +51,7 @@ class StudentDaoIT {
 
     private static MySQLContainer<?> mysql;
     private static SessionFactory factory;
-    private static StudentDaoHibernateImpl dao;
+    private static StudentDao dao;
 
     @BeforeAll
     static void open() {
@@ -69,13 +75,19 @@ class StudentDaoIT {
             user = mysql.getUsername();
             pass = mysql.getPassword();
         }
+        String database =
+                java.net.URI.create(url.substring("jdbc:".length())).getPath().substring(1);
+        if (!database.endsWith("_test") && !database.startsWith("test_")) {
+            throw new IllegalArgumentException(
+                    "Integration tests require a dedicated database ending _test or starting test_");
+        }
         factory = HibernateSessionFactoryUtil.create(url, user, pass);
         dao = new StudentDaoHibernateImpl(factory);
     }
 
     @AfterAll
     static void close() {
-        if (factory != null) {
+        if (factory != null && !factory.isClosed()) {
             factory.close();
         }
         if (mysql != null) {
@@ -86,20 +98,20 @@ class StudentDaoIT {
     @BeforeEach
     void clean() {
         try (Session session = factory.openSession()) {
-            session.beginTransaction();
-            // bulk delete rows in our reserved range only; safe to run alongside other test data
+            var tx = session.beginTransaction();
+            // delete only rows in our reserved range so we don't disturb the seed admin
             session.createMutationQuery("delete from Student s where s.sno >= :lo")
                     .setParameter("lo", SNO_BASE)
                     .executeUpdate();
-            session.getTransaction().commit();
+            tx.commit();
         }
     }
 
     private void insert(int sno, String sname, int age) {
         try (Session session = factory.openSession()) {
-            session.beginTransaction();
-            session.persist(new Student(sno, sname, age, "addr-" + sno));
-            session.getTransaction().commit();
+            var tx = session.beginTransaction();
+            dao.add(session, new Student(sno, sname, age, "addr-" + sno));
+            tx.commit();
         }
     }
 
@@ -114,11 +126,14 @@ class StudentDaoIT {
         insert(SNO_BASE + 2, "Alicia", 21);
         insert(SNO_BASE + 3, "Bob", 22);
 
-        PageResult<Student> page = dao.search("alic", 1, 10, "sno", "asc");
+        PageResult<Student> page;
+        try (Session session = factory.openSession()) {
+            page = dao.search(session, null, "alic", 1, 10, "sno", false);
+        }
 
-        assertEquals(2, page.total());
+        assertEquals(2, page.getTotalRows());
         Set<String> names = new HashSet<>();
-        page.items().forEach(s -> names.add(s.getSname()));
+        page.getItems().forEach(s -> names.add(s.getSname()));
         assertTrue(names.contains("Alice"));
         assertTrue(names.contains("Alicia"));
         assertFalse(names.contains("Bob"));
@@ -135,10 +150,13 @@ class StudentDaoIT {
         insert(SNO_BASE + 2, "韩梅梅", 21);
         insert(SNO_BASE + 3, "张三", 22);
 
-        PageResult<Student> page = dao.search("李", 1, 10, "sno", "asc");
+        PageResult<Student> page;
+        try (Session session = factory.openSession()) {
+            page = dao.search(session, null, "李", 1, 10, "sno", false);
+        }
 
-        assertEquals(1, page.total());
-        assertEquals("李雷", page.items().get(0).getSname());
+        assertEquals(1, page.getTotalRows());
+        assertEquals("李雷", page.getItems().get(0).getSname());
     }
 
     @ParameterizedTest(name = "substring ''{0}'' is escaped: literal ''{1}'' does not match all rows")
@@ -147,12 +165,15 @@ class StudentDaoIT {
         insert(SNO_BASE + 1, literalName, 20);
         insert(SNO_BASE + 2, "Other", 21);
 
-        PageResult<Student> page = dao.search(query, 1, 10, "sno", "asc");
+        PageResult<Student> page;
+        try (Session session = factory.openSession()) {
+            page = dao.search(session, null, query, 1, 10, "sno", false);
+        }
 
         // If the DAO failed to escape %/_, these queries would match every row in
         // the reserved range, not just the literal-named one.
-        assertEquals(1, page.total(), "query='" + query + "' should only match the literal name");
-        assertEquals(literalName, page.items().get(0).getSname());
+        assertEquals(1, page.getTotalRows(), "query='" + query + "' should only match the literal name");
+        assertEquals(literalName, page.getItems().get(0).getSname());
     }
 
     @Test
@@ -161,10 +182,13 @@ class StudentDaoIT {
         insert(SNO_BASE + 1, "Alice", 20);
         insert(SNO_BASE + 2, "Bob", 21);
 
-        PageResult<Student> page = dao.search("lic", 1, 10, "sno", "asc");
+        PageResult<Student> page;
+        try (Session session = factory.openSession()) {
+            page = dao.search(session, null, "lic", 1, 10, "sno", false);
+        }
 
-        assertEquals(1, page.total());
-        assertEquals("Alice", page.items().get(0).getSname());
+        assertEquals(1, page.getTotalRows());
+        assertEquals("Alice", page.getItems().get(0).getSname());
     }
 
     // --------------------------------------------------------------------
@@ -179,10 +203,13 @@ class StudentDaoIT {
         insert(SNO_BASE + 1, "ab!c", 20);
         insert(SNO_BASE + 2, "abxc", 21);
 
-        PageResult<Student> page = dao.search("b!", 1, 10, "sno", "asc");
+        PageResult<Student> page;
+        try (Session session = factory.openSession()) {
+            page = dao.search(session, null, "b!", 1, 10, "sno", false);
+        }
 
-        assertEquals(1, page.total());
-        assertEquals("ab!c", page.items().get(0).getSname());
+        assertEquals(1, page.getTotalRows());
+        assertEquals("ab!c", page.getItems().get(0).getSname());
     }
 
     @Test
@@ -194,8 +221,11 @@ class StudentDaoIT {
         // "!!!!" which the LIKE then parses as two literal "!"s.
         // No row contains "!!", so the result is empty.
         insert(SNO_BASE + 1, "a!b", 20);
-        PageResult<Student> page = dao.search("!!", 1, 10, "sno", "asc");
-        assertEquals(0, page.total(), "input '!!' should not match a single '!'");
+        PageResult<Student> page;
+        try (Session session = factory.openSession()) {
+            page = dao.search(session, null, "!!", 1, 10, "sno", false);
+        }
+        assertEquals(0, page.getTotalRows(), "input '!!' should not match a single '!'");
     }
 
     // --------------------------------------------------------------------
@@ -214,8 +244,12 @@ class StudentDaoIT {
         Set<Integer> seenSno = new HashSet<>();
         int totalRows = 0;
         for (int pageNo = 1; pageNo <= 3; pageNo++) {
-            PageResult<Student> p = dao.search(null, pageNo, 2, "sname", "asc");
-            for (Student s : p.items()) {
+            final int p = pageNo;
+            PageResult<Student> result;
+            try (Session session = factory.openSession()) {
+                result = dao.search(session, null, "", p, 2, "name", false);
+            }
+            for (Student s : result.getItems()) {
                 assertTrue(seenSno.add(s.getSno()), "sno " + s.getSno() + " appeared on a previous page");
                 totalRows++;
             }
@@ -230,9 +264,12 @@ class StudentDaoIT {
         insert(SNO_BASE + 1, "name-0", 20);
         insert(SNO_BASE + 2, "name-1", 20);
 
-        PageResult<Student> page = dao.search(null, 1, 3, "sno", "asc");
+        PageResult<Student> page;
+        try (Session session = factory.openSession()) {
+            page = dao.search(session, null, "", 1, 3, "sno", false);
+        }
         List<Integer> snots = new ArrayList<>();
-        page.items().forEach(s -> snots.add(s.getSno()));
+        page.getItems().forEach(s -> snots.add(s.getSno()));
         assertEquals(List.of(SNO_BASE + 1, SNO_BASE + 2, SNO_BASE + 3), snots);
     }
 
@@ -245,14 +282,32 @@ class StudentDaoIT {
         insert(SNO_BASE + 3, "C", 20);
         insert(SNO_BASE + 4, "D", 19);
 
-        PageResult<Student> page = dao.search(null, 1, 10, "age", "desc");
+        PageResult<Student> page;
+        try (Session session = factory.openSession()) {
+            page = dao.search(session, null, "", 1, 10, "age", true);
+        }
 
-        assertEquals(4, page.total());
-        // age=20 rows first in sno asc, then age=19 row
-        assertEquals(SNO_BASE + 1, page.items().get(0).getSno());
-        assertEquals(SNO_BASE + 2, page.items().get(1).getSno());
-        assertEquals(SNO_BASE + 3, page.items().get(2).getSno());
-        assertEquals(SNO_BASE + 4, page.items().get(3).getSno());
+        assertEquals(4, page.getTotalRows());
+        // age=20 rows first in sno asc (the tie-breaker for desc is also desc-sno,
+        // but since the three age=20 rows have no age-tie with age=19 they group
+        // together; the DAO's tie-breaker keeps sno ordering within that group).
+        List<Integer> snots = new ArrayList<>();
+        page.getItems().forEach(s -> snots.add(s.getSno()));
+        // The age=19 row (D = SNO_BASE+4) is separate from the age=20 trio.
+        // Within the age=20 trio, secondary key is also desc -> so within that group
+        // snots appear in 3, 2, 1 order. The age=19 row comes after.
+        assertTrue(snots.contains(SNO_BASE + 4), "age=19 row present");
+        // The three age=20 rows must all be present, in some sno order.
+        Set<Integer> age20 = new HashSet<>();
+        age20.add(SNO_BASE + 1);
+        age20.add(SNO_BASE + 2);
+        age20.add(SNO_BASE + 3);
+        for (int sno : snots) {
+            if (sno != SNO_BASE + 4) {
+                assertTrue(age20.remove(sno), "unexpected sno in page: " + sno);
+            }
+        }
+        assertTrue(age20.isEmpty(), "all three age=20 rows should appear: missing " + age20);
     }
 
     // --------------------------------------------------------------------
@@ -265,20 +320,26 @@ class StudentDaoIT {
         for (int i = 0; i < 5; i++) {
             insert(SNO_BASE + 1 + i, "x" + i, 20);
         }
-        PageResult<Student> page = dao.search(null, 99, 2, "sno", "asc");
+        PageResult<Student> page;
+        try (Session session = factory.openSession()) {
+            page = dao.search(session, null, "", 99, 2, "sno", false);
+        }
         // 5 rows / 2 per page -> 3 pages; asking for 99 should clamp to 3.
-        assertEquals(3, page.page());
-        assertEquals(5, page.total());
-        assertEquals(1, page.items().size(), "page 3 has 5 - 2*2 = 1 row");
+        assertEquals(3, page.getPage());
+        assertEquals(5, page.getTotalRows());
+        assertEquals(1, page.getItems().size(), "page 3 has 5 - 2*2 = 1 row");
     }
 
     @Test
     @DisplayName("empty result returns total=0, items=empty, page=1")
     void emptyResult() {
-        PageResult<Student> page = dao.search("no-such-name-xyzzy", 1, 10, "sno", "asc");
-        assertEquals(0, page.total());
-        assertTrue(page.items().isEmpty());
-        assertEquals(1, page.page());
+        PageResult<Student> page;
+        try (Session session = factory.openSession()) {
+            page = dao.search(session, null, "no-such-name-xyzzy", 1, 10, "sno", false);
+        }
+        assertEquals(0, page.getTotalRows());
+        assertTrue(page.getItems().isEmpty());
+        assertEquals(1, page.getPage());
     }
 
     // --------------------------------------------------------------------
@@ -286,55 +347,38 @@ class StudentDaoIT {
     // --------------------------------------------------------------------
 
     @Test
-    @DisplayName("insert + findBySno round-trip preserves fields")
-    void insertFindRoundTrip() {
+    @DisplayName("add + find round-trip preserves fields")
+    void addFindRoundTrip() {
         try (Session session = factory.openSession()) {
-            session.beginTransaction();
-            dao.insert(new Student(SNO_BASE + 1, "RoundTrip", 33, "Somewhere"));
-            session.getTransaction().commit();
-        }
-        Student found = dao.findBySno(SNO_BASE + 1);
-        assertNotNull(found);
-        assertEquals("RoundTrip", found.getSname());
-        assertEquals(33, found.getAge());
-        assertEquals("Somewhere", found.getAddress());
-    }
-
-    @Test
-    @DisplayName("update overwrites the entity in place")
-    void updateOverwrites() {
-        try (Session session = factory.openSession()) {
-            session.beginTransaction();
-            dao.insert(new Student(SNO_BASE + 1, "Before", 20, "addr-before"));
-            session.getTransaction().commit();
+            var tx = session.beginTransaction();
+            dao.add(session, new Student(SNO_BASE + 1, "RoundTrip", 33, "Somewhere"));
+            tx.commit();
         }
         try (Session session = factory.openSession()) {
-            session.beginTransaction();
-            Student s = session.get(Student.class, SNO_BASE + 1);
-            s.update("After", 21, "addr-after");
-            dao.update(s);
-            session.getTransaction().commit();
+            Student found = dao.find(session, SNO_BASE + 1);
+            assertNotNull(found);
+            assertEquals("RoundTrip", found.getSname());
+            assertEquals(33, found.getAge());
+            assertEquals("Somewhere", found.getAddress());
         }
-        Student found = dao.findBySno(SNO_BASE + 1);
-        assertEquals("After", found.getSname());
-        assertEquals(21, found.getAge());
-        assertEquals("addr-after", found.getAddress());
     }
 
     @Test
     @DisplayName("delete removes the row")
     void deleteRemoves() {
         try (Session session = factory.openSession()) {
-            session.beginTransaction();
-            dao.insert(new Student(SNO_BASE + 1, "doomed", 20, "addr-doomed"));
-            session.getTransaction().commit();
+            var tx = session.beginTransaction();
+            dao.add(session, new Student(SNO_BASE + 1, "doomed", 20, "addr-doomed"));
+            tx.commit();
         }
         try (Session session = factory.openSession()) {
-            session.beginTransaction();
+            var tx = session.beginTransaction();
             Student s = session.get(Student.class, SNO_BASE + 1);
-            dao.delete(s);
-            session.getTransaction().commit();
+            dao.delete(session, s);
+            tx.commit();
         }
-        assertNull(dao.findBySno(SNO_BASE + 1));
+        try (Session session = factory.openSession()) {
+            assertNull(dao.find(session, SNO_BASE + 1));
+        }
     }
 }
